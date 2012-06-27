@@ -1,21 +1,27 @@
-#define SPECTATOR_TEAM 1
-#define TERRORIST_TEAM 2
-#define COUNTER_TERRORIST_TEAM 3
+#define QUERY_URL               "http://query.gametech.com.au"
 
-#define DEFAULT_CT_NAME "Counter-Terrorists"
-#define DEFAULT_T_NAME "Terrorists"
+#define CHAT_PREFIX             "\x03<WarMod> \x04"
+#define SPECTATOR_TEAM          1
+#define TERRORIST_TEAM          2
+#define COUNTER_TERRORIST_TEAM  3
 
-#define PLAYER_DISC -1
-#define PLAYER_READY 1
-#define PLAYER_UNREADY 2
+#define DEFAULT_SPECTATOR_NAME  "Spectators"
+#define DEFAULT_T_NAME          "Terrorists"
+#define DEFAULT_CT_NAME         "Counter-Terrorists"
 
-#define SCORE_CT 0
-#define SCORE_T 1
+#define PLAYER_DISC       -1
+#define PLAYER_READY       1
+#define PLAYER_UNREADY     2
 
-#define SCORE_FIRST_HALF 0
-#define SCORE_SECOND_HALF 1
+#define SCORE_T            0
+#define SCORE_CT           1
 
-#define DMG_MSG_SIZE 8192
+#define SCORE_FIRST_HALF   0
+#define SCORE_SECOND_HALF  1
+
+#define DMG_MSG_SIZE       8192
+
+#define MAX_PARAM_SIZE     512
 
 #define NUM_WEAPONS        28
 #define LOG_HIT_OFFSET     7
@@ -43,118 +49,181 @@
 #define CLUTCH_WON         3
 #define CLUTCH_NUM         4
 
-#define WM_VERSION "3.0.15"
-#define WM_DESCRIPTION "An automative service created by Twelve-60 of GameTech (www.gametech.com.au) for CS:S competition matches"
+#define WM_VERSION         "3.1.0"
+#define WM_DESCRIPTION     "An automative service created by Twelve-60 of GameTech (www.gametech.com.au) for CS:S competition matches"
 
+new String:g_team_name_cache[16][64];
 
-/*********************************************************
+/**
  *  called when a match starting LiveOn3 
  * 
  * @noreturn		
- *********************************************************/
+ */
 forward OnLiveOn3();
 
 
-/*********************************************************
+/**
  *  called when a match reaches half time
  *  includes when in overtime
  * 
  * @noreturn
- *********************************************************/
+ */
 forward OnHalfTime();
 
 
-/*********************************************************
+/**
  *  called when a match reaches full time
  *  not called if match is prematurely reset
  * 
  * @noreturn
- *********************************************************/
+ */
 forward OnEndMatch();
 
 
-/*********************************************************
+/**
  *  called when a match half is reset
  *  only occurs if match was currently underway
  * 
  * @noreturn
- *********************************************************/
+ */
 forward OnResetHalf();
 
 
-/*********************************************************
+/**
  *  called when a match is reset
  *  only occurs if match was currently underway
  * 
  * @noreturn
- *********************************************************/
+ */
 forward OnResetMatch();
 
 
-/*********************************************************
- *  get the logstring ("player<userid><authid><team>") for the specified client
- * 
- * @param  client		the client index to get name for
- * @param  String:LogString	the buffer to save the logstring in
- * @param  size			the size of the buffer
- * @return 			-1 on not connected
- *				client index
- *********************************************************/
+/**
+ * print a message to chat using the warmod prefix, splitting the message
+ * by any newlines (12 max)
+ *
+ * @param  client			client to print the message to
+ * @param  String:format	format string
+ * @param  any:...			format string parameters (optional)
+ * @noreturn
+ */
 
-stock CS_GetLogString(client, String:LogString[], size)
+WM_PrintToChat(client, String:format[], any:...)
 {
-	if (client == 0 || !IsClientInGame(client))
-		return -1;
+	decl String:message[4096];
+	VFormat(message, sizeof(message), format, 3);
+	new String:lines[12][256];
+	new numLines = ExplodeString(message, "\n", lines, 12, 256, true);
+	for (new i = 0; i < numLines; i++)
+	{
+		TrimString(lines[i]);
+		if (!StrEqual(lines[i], ""))
+		{
+			PrintToChat(client, "%s%s", CHAT_PREFIX, lines[i]);
+		}
+	}
+}
 
-	new String:player_name[32];
+
+/**
+ *  get the standard logstring ("player<userid><authid><team>") for the specified client
+ * 
+ * @param  client			the client index to get name for
+ * @param  String:LogString	the buffer to save the logstring in
+ * @param  size				the size of the buffer
+ * @return 					-1 on not connected
+ *							client index
+ */
+
+stock CS_GetStandardLogString(client, String:LogString[], size)
+{
+	if (client == 0)
+	{
+		strcopy(LogString, size, "Console<0><Console><Console>");
+		return client;
+	}
+	
+	if (!IsClientInGame(client))
+	{
+		Format(LogString, size, "null");
+		return -1;
+	}
+
 	new userid;
 	new String:authid[32];
-	new String:team[32];
+	new String:team_name[64];
 	
-	GetClientName(client, player_name, sizeof(player_name));
 	GetClientAuthString(client, authid, sizeof(authid));
 	userid = GetClientUserId(client);
+	GetTeamName2(GetClientTeam(client), team_name, sizeof(team_name));
 	
-	if (GetClientTeam(client) == TERRORIST_TEAM)
-	{
-		team = "TERRORIST";
-	}
-	else if(GetClientTeam(client) == COUNTER_TERRORIST_TEAM)
-	{
-		team = "CT";
-	}
-	else if(GetClientTeam(client) == SPECTATOR_TEAM)
-	{
-		team = "Spectator";
-	}
-	
-	Format(LogString, size, "%s<%d><%s><%s>", player_name, userid, authid, team);
+	Format(LogString, size, "%N<%d><%s><%s>", client, userid, authid, team_name);
 
 	return client;
 }
 
 
-/*********************************************************
- *  get the advanced logstring ("player<userid><authid><team><origin_x><origin_y><origin_z><velocity_x><velocity_y><velocity_z><health><armour><helmut>") for the specified client
+/**
+ *  get the warmod logstring for the specified client in json format
  * 
- * @param  client		the client index to get name for
+ * @param  client			the client index to get name for
  * @param  String:LogString	the buffer to save the logstring in
- * @param  size			the size of the buffer
- * @return 			-1 on not connected
- *				client index
- *********************************************************/
+ * @param  size				the size of the buffer
+ * @return 					-1 on not connected
+ *							client index
+ */
+
+stock CS_GetLogString(client, String:LogString[], size)
+{
+	if (client == 0)
+	{
+		strcopy(LogString, size, "{\"name\": \"Console\", \"userId\": 0, \"uniqueId\": \"Console\", \"team\": 0}");
+		return client;
+	}
+	
+	if (!IsClientInGame(client))
+	{
+		Format(LogString, size, "null");
+		return -1;
+	}
+
+	new String:player_name[32];
+	new userid;
+	new String:authid[32];
+	
+	GetClientName(client, player_name, sizeof(player_name));
+	GetClientAuthString(client, authid, sizeof(authid));
+	userid = GetClientUserId(client);
+	
+	EscapeString(player_name, sizeof(player_name));
+	EscapeString(authid, sizeof(authid));
+	Format(LogString, size, "{\"name\": \"%s\", \"userId\": %d, \"uniqueId\": \"%s\", \"team\": %d}", player_name, userid, authid, GetClientTeam(client));
+
+	return client;
+}
+
+
+/**
+ *  get the advanced logstring for the specified client in json format
+ * 
+ * @param  client			the client index to get name for
+ * @param  String:LogString	the buffer to save the logstring in
+ * @param  size				the size of the buffer
+ * @return 					-1 on not connected
+ *							client index
+ */
 
 stock CS_GetAdvLogString(client, String:LogString[], size)
 {
-	if (client == 0 || !IsClientConnected(client))
+	if (client == 0 || !IsClientInGame(client))
 	{
+		Format(LogString, size, "null");
 		return -1;
 	}
 	
 	new String:player_name[32];
 	new userid;
 	new String:authid[32];
-	new String:team[32];
 	new Float:player_origin[3];
 	new Float:eye_angles[3];
 	
@@ -162,36 +231,25 @@ stock CS_GetAdvLogString(client, String:LogString[], size)
 	GetClientAuthString(client, authid, sizeof(authid));
 	userid = GetClientUserId(client);
 	
-	if (GetClientTeam(client) == TERRORIST_TEAM)
-	{
-		team = "TERRORIST";
-	}
-	else if(GetClientTeam(client) == COUNTER_TERRORIST_TEAM)
-	{
-		team = "CT";
-	}
-	else if(GetClientTeam(client) == SPECTATOR_TEAM)
-	{
-		team = "Spectator";
-	}
-		
 	GetClientAbsOrigin(client, player_origin);
 	GetClientEyeAngles(client, eye_angles);
 
-	Format(LogString, size, "%s<%d><%s><%s><%.2f><%.2f><%.2f><%.2f><%.2f><%.2f><%.2f><%.2f><%.2f><%d><%d><%d>", player_name, userid, authid, team, player_origin[0], player_origin[1], player_origin[2] + GetEntPropFloat(client, Prop_Send, "m_vecViewOffset[2]"), eye_angles[0], eye_angles[1], eye_angles[2], GetEntPropFloat(client, Prop_Send, "m_vecVelocity[0]"), GetEntPropFloat(client, Prop_Send, "m_vecVelocity[1]"), GetEntPropFloat(client, Prop_Send, "m_vecVelocity[2]"), GetEntProp(client, Prop_Send, "m_iHealth"), GetEntProp(client, Prop_Send, "m_ArmorValue"), GetEntProp(client, Prop_Send, "m_bHasHelmet"));
+	EscapeString(player_name, sizeof(player_name));
+	EscapeString(authid, sizeof(authid));
+	Format(LogString, size, "{\"name\": \"%s\", \"userId\": %d, \"uniqueId\": \"%s\", \"team\": %d, \"origin\": [%.2f, %.2f, %.2f], \"velocity\": [%.2f, %.2f, %.2f], \"view\": [%.2f, %.2f, %.2f], \"health\": %d, \"armor\": %d, \"helmet\": %d}", player_name, userid, authid, GetClientTeam(client), player_origin[0], player_origin[1], player_origin[2] + GetEntPropFloat(client, Prop_Send, "m_vecViewOffset[2]"), GetEntPropFloat(client, Prop_Send, "m_vecVelocity[0]"), GetEntPropFloat(client, Prop_Send, "m_vecVelocity[1]"), GetEntPropFloat(client, Prop_Send, "m_vecVelocity[2]"), eye_angles[0], eye_angles[1], eye_angles[2], GetEntProp(client, Prop_Send, "m_iHealth"), GetEntProp(client, Prop_Send, "m_ArmorValue"), GetEntProp(client, Prop_Send, "m_bHasHelmet"));
 
 	return client;
 }
 
 
-/*********************************************************
+/**
  *  get the comma'd string version of an integer
  * 
- * @param  OldMoney		the integer to convert
+ * @param  OldMoney			the integer to convert
  * @param  String:NewMoney	the buffer to save the string in
- * @param  size			the size of the buffer
+ * @param  size				the size of the buffer
  * @noreturn
- *********************************************************/
+ */
 
 stock IntToMoney(OldMoney, String:NewMoney[], size)
 {
@@ -220,13 +278,13 @@ stock IntToMoney(OldMoney, String:NewMoney[], size)
 }
 
 
-/*********************************************************
+/**
  *  get the team index opposite to the specified team
  * 
  * @param  team		team index to get opposite of
- * @return		false on error
- *			team index
- *********************************************************/
+ * @return			false on error
+ *					team index
+ */
 
 stock GetOtherTeam(team)
 {
@@ -245,12 +303,12 @@ stock GetOtherTeam(team)
 }
 
 
-/*********************************************************
+/**
  *  swap all players to the opposite team
  *  allows for skin choice
  * 
  * @noreturn
- *********************************************************/
+ */
 
 stock CS_SwapTeams()
 {
@@ -264,11 +322,11 @@ stock CS_SwapTeams()
 }
 
 
-/*********************************************************
+/**
  *  returns number of clients currently playing on a team
  * 
  * return		count
- *********************************************************/
+ */
 
 stock CS_GetPlayingCount()
 {
@@ -284,11 +342,11 @@ stock CS_GetPlayingCount()
 }
 
 
-/*********************************************************
+/**
  *  strip all weapons from specified client but the knife
  * 
  * @noreturn
- *********************************************************/
+ */
 
 stock CS_StripButKnife(client, bool:equip=true)
 {
@@ -319,11 +377,11 @@ stock CS_StripButKnife(client, bool:equip=true)
 }
 
 
-/*********************************************************
+/**
  *  return the number of players alive on a given team
  * 
  * @noreturn
- *********************************************************/
+ */
 
 stock GetNumAlive(team)
 {
@@ -339,11 +397,11 @@ stock GetNumAlive(team)
 }
 
 
-/*********************************************************
- *  Equip the specified client with the knife
+/**
+ *  equip the specified client with the knife
  * 
  * @noreturn
- *********************************************************/
+ */
 
 stock CS_EquipKnife(client)
 {
@@ -351,11 +409,11 @@ stock CS_EquipKnife(client)
 }
 
 
-/*********************************************************
- *  Removing filename invalid characters
+/**
+ *  removing filename invalid characters
  * 
  * @noreturn
- *********************************************************/
+ */
 
 stock StripFilename(String:filename[], size)
 {
@@ -373,11 +431,11 @@ stock StripFilename(String:filename[], size)
 }
 
 
-/*********************************************************
- *  Converting a string to lowercase
+/**
+ *  converting a string to lowercase
  * 
  * @noreturn
- *********************************************************/
+ */
 
 stock StringToLower(String:input[], size)
 {
@@ -388,11 +446,11 @@ stock StringToLower(String:input[], size)
 }
 
 
-/*********************************************************
- *  Hide setting an int cvar
+/**
+ *  hide setting an int cvar
  * 
  * @noreturn
- *********************************************************/
+ */
  
 stock SetConVarIntHidden(Handle:cvar, const value)
 {
@@ -408,11 +466,11 @@ stock SetConVarIntHidden(Handle:cvar, const value)
 }
 
 
-/*********************************************************
- *  Hide setting a string cvar
+/**
+ *  hide setting a string cvar
  * 
  * @noreturn
- *********************************************************/
+ */
  
 stock SetConVarStringHidden(Handle:cvar, String:value[])
 {
@@ -423,4 +481,43 @@ stock SetConVarStringHidden(Handle:cvar, String:value[])
 	GetConVarName(cvar, cvar_name, sizeof(cvar_name));
 	Steam_SetRule(cvar_name, value);
 	SetConVarFlags(cvar, flags);
+}
+
+
+/**
+ *  escape a string, designed for JSON encoding
+ * 
+ * @noreturn
+ */
+
+stock EscapeString(String:value[], size)
+{
+	ReplaceString(value, size, "\\", "\\\\");
+	ReplaceString(value, size, "\"", "\\\"");
+	ReplaceString(value, size, "\b", "\\b");
+	ReplaceString(value, size, "\t", "\\t");
+	ReplaceString(value, size, "\n", "\\n");
+	ReplaceString(value, size, "\f", "\\f");
+	ReplaceString(value, size, "\r", "\\r");
+}
+
+
+/**
+ * get the team name given by the game (e.g. TERRORIST and CT)
+ *
+ * @param  index			the team index
+ * @param  String:team_name	the string buffer to place the name
+ * @param  size				size of the buffer
+ * @noreturn
+ */
+
+stock GetTeamName2(index, String:team_name[], size)
+{
+	if (StrEqual(g_team_name_cache[index], ""))
+	{
+		GetTeamName(index, team_name, size);
+		strcopy(g_team_name_cache[index], size, team_name);
+	}
+	
+	strcopy(team_name, size, g_team_name_cache[index]);
 }

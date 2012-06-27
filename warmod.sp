@@ -2,6 +2,7 @@
 
 #include <sourcemod>
 #include <sdktools>
+#include <geoip>
 #include <cstrike>
 #include <socket>
 #include <steamtools>
@@ -12,12 +13,18 @@
 
 /* player info */
 new g_player_list[MAXPLAYERS + 1];
+new bool:g_premium_list[MAXPLAYERS + 1];
+new String:g_premium_prefix[MAXPLAYERS + 1][MAX_PARAM_SIZE];
 new bool:g_cancel_list[MAXPLAYERS + 1];
 new String:user_damage[MAXPLAYERS + 1][DMG_MSG_SIZE];
 
 new g_scores[2][2];
 new g_scores_overtime[2][256][2];
 new g_overtime_count = 0;
+
+new g_last_scores[2] = -1;
+new g_last_maxrounds;
+new String:g_last_names[2][64] = {DEFAULT_T_NAME, DEFAULT_CT_NAME};
 
 new g_i_ragdolls = -1;
 new g_i_account = -1;
@@ -31,8 +38,7 @@ new Float:g_match_start;
 new bool:g_log_warmod_dir = false;
 new String:g_log_filename[128];
 new Handle:g_log_file = INVALID_HANDLE;
-new String:weapon_list[][] =
-{"ak47","m4a1","awp","deagle","mp5navy","aug","p90","famas","galil","scout","g3sg1","hegrenade","usp", "glock","m249","m3","elite","fiveseven","mac10","p228","sg550","sg552","tmp","ump45","xm1014","knife","smokegrenade","flashbang"};
+new String:weapon_list[][] = {"ak47","m4a1","awp","deagle","mp5navy","aug","p90","famas","galil","scout","g3sg1","hegrenade","usp", "glock","m249","m3","elite","fiveseven","mac10","p228","sg550","sg552","tmp","ump45","xm1014","knife","smokegrenade","flashbang"};
 new weapon_stats[MAXPLAYERS + 1][NUM_WEAPONS][LOG_HIT_NUM];
 new clutch_stats[MAXPLAYERS + 1][CLUTCH_NUM];
 new String:last_weapon[MAXPLAYERS + 1][64];
@@ -50,6 +56,7 @@ new Handle:g_f_on_end_match = INVALID_HANDLE;
 new Handle:g_h_lw_enabled = INVALID_HANDLE;
 new Handle:g_h_lw_address = INVALID_HANDLE;
 new Handle:g_h_lw_port = INVALID_HANDLE;
+new Handle:g_h_lw_bindaddress = INVALID_HANDLE;
 new Handle:g_h_lw_group_name = INVALID_HANDLE;
 new Handle:g_h_lw_group_password = INVALID_HANDLE;
 new Handle:g_h_force_camera = INVALID_HANDLE;
@@ -61,6 +68,7 @@ new Handle:g_h_stats_trace_enabled = INVALID_HANDLE;
 new Handle:g_h_stats_trace_delay = INVALID_HANDLE;
 new Handle:g_h_rcon_only = INVALID_HANDLE;
 new Handle:g_h_global_chat = INVALID_HANDLE;
+new Handle:g_h_stv_chat = INVALID_HANDLE;
 new Handle:g_h_locked = INVALID_HANDLE;
 new Handle:g_h_min_ready = INVALID_HANDLE;
 new Handle:g_h_max_players = INVALID_HANDLE;
@@ -68,6 +76,7 @@ new Handle:g_h_match_config = INVALID_HANDLE;
 new Handle:g_h_live_config = INVALID_HANDLE;
 new Handle:g_h_knife_config = INVALID_HANDLE;
 new Handle:g_h_end_config = INVALID_HANDLE;
+new Handle:g_h_half_time_config = INVALID_HANDLE;
 new Handle:g_h_round_money = INVALID_HANDLE;
 new Handle:g_h_night_vision = INVALID_HANDLE;
 new Handle:g_h_bomb_frags = INVALID_HANDLE;
@@ -105,7 +114,6 @@ new Handle:g_h_body_remove = INVALID_HANDLE;
 new Handle:g_h_deathcam_remove = INVALID_HANDLE;
 new Handle:g_h_deathcam_delay = INVALID_HANDLE;
 new Handle:g_h_warmup_respawn = INVALID_HANDLE;
-new Handle:g_h_modifiers = INVALID_HANDLE;
 new Handle:g_h_status = INVALID_HANDLE;
 new Handle:g_h_upload_results = INVALID_HANDLE;
 new Handle:g_h_table_name = INVALID_HANDLE;
@@ -144,13 +152,12 @@ new g_overtime_mode = 0;
 
 /* teams */
 new String:g_t_name[64];
+new String:g_t_name_escaped[64]; // pre-escaped for warmod logs
 new String:g_ct_name[64];
+new String:g_ct_name_escaped[64]; // pre-escaped for warmod logs
 
 /* admin menu */
 new Handle:g_h_menu = INVALID_HANDLE;
-
-/* database */
-new Handle:wm_db = INVALID_HANDLE;
 
 /* deathcam */
 new Handle:g_deathcam_delays[MAXPLAYERS + 1] = INVALID_HANDLE;
@@ -172,6 +179,7 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
 public OnPluginStart()
 {
 	LoadTranslations("warmod.phrases");
+	LoadTranslations("common.phrases");
 	
 	new Handle:topmenu;
 	if (LibraryExists("adminmenu") && ((topmenu = GetAdminTopMenu()) != INVALID_HANDLE))
@@ -188,7 +196,7 @@ public OnPluginStart()
 	RegConsoleCmd("score", ConsoleScore);
 	RegConsoleCmd("wm_version", WMVersion);
 	RegConsoleCmd("say", SayChat);
-	RegConsoleCmd("say_team", SayTeamChat);
+	RegConsoleCmd("say_team", SayChat);
 	RegConsoleCmd("buy", RestrictBuy);
 	RegConsoleCmd("jointeam", ChooseTeam);
 	RegConsoleCmd("spectate", ChooseTeam);
@@ -196,6 +204,9 @@ public OnPluginStart()
 	RegConsoleCmd("wmrl", ReadyList);
 	
 	RegConsoleCmd("wm_cash", AskTeamMoney);
+	
+	RegAdminCmd("last_score", LastMatch, ADMFLAG_CUSTOM1, "Displays the score of the last match to the console");
+	RegAdminCmd("last", LastMatch, ADMFLAG_CUSTOM1, "Displays the score of the last match to the console");
 	
 	RegAdminCmd("notlive", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
 	RegAdminCmd("nl", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
@@ -244,18 +255,24 @@ public OnPluginStart()
 	RegAdminCmd("readyoff", ReadyOff, ADMFLAG_CUSTOM1, "Turns off the ReadyUp System if enabled");
 	RegAdminCmd("roff", ReadyOff, ADMFLAG_CUSTOM1, "Turns off the ReadyUp System if enabled");
 	
+	RegAdminCmd("wm_debug_create_table", CreateTable, ADMFLAG_ROOT, "Testing purposes only, connects to the WarMod database and creates a match results table (if it does not already exist)");
+	RegAdminCmd("lw_reconnect", LiveWire_ReConnect, ADMFLAG_ROOT, "Reconnects LiveWire if lw_enabled is 1");
+	
 	g_h_active = CreateConVar("wm_active", "1", "Enable or disable WarMod as active", FCVAR_NOTIFY);
 	g_h_lw_enabled = CreateConVar("lw_enabled", "1", "Enable or disable LiveWire", FCVAR_NOTIFY);
 	g_h_lw_address = CreateConVar("lw_address", "stream.livewire.gametech.com.au", "Sets the ip/host that LiveWire will use to connect", FCVAR_NOTIFY);
 	g_h_lw_port = CreateConVar("lw_port", "12012", "Sets the port that LiveWire will use to connect", FCVAR_NOTIFY, true, 1.0);
-	g_h_lw_group_name = CreateConVar("lw_group_name", "", "Sets the username that LiveWire will use to connect", FCVAR_PROTECTED|FCVAR_DONTRECORD);
-	g_h_lw_group_password = CreateConVar("lw_group_password", "", "Sets the password that LiveWire will use to connect", FCVAR_PROTECTED|FCVAR_DONTRECORD);
+	g_h_lw_bindaddress = CreateConVar("lw_bindaddress", "", "Optional setting to specify which ip LiveWire will bind to (for servers with multiple ips) - blank = automatic/primary", FCVAR_NOTIFY);
+	g_h_lw_group_name = CreateConVar("lw_group_name", "", "Sets the group name that LiveWire will use", FCVAR_PROTECTED|FCVAR_DONTRECORD);
+	g_h_lw_group_password = CreateConVar("lw_group_password", "", "Sets the group password that LiveWire will use", FCVAR_PROTECTED|FCVAR_DONTRECORD);
+	
 	g_h_stats_enabled = CreateConVar("wm_stats_enabled", "1", "Enable or disable statistical logging", FCVAR_NOTIFY);
-	g_h_stats_method = CreateConVar("wm_stats_method", "2", "Sets the stats logging method: 0 = UDP stream/server logs, 1 = warmod logs, 2 = both", FCVAR_NOTIFY, true, 0.0);
+	g_h_stats_method = CreateConVar("wm_stats_method", "2", "Sets the stats logging method: 0 = UDP stream/server logs, 1 = WarMod logs, 2 = both", FCVAR_NOTIFY, true, 0.0);
 	g_h_stats_trace_enabled = CreateConVar("wm_stats_trace", "0", "Enable or disable updating all player positions, every wm_stats_trace_delay seconds", FCVAR_NOTIFY);
 	g_h_stats_trace_delay = CreateConVar("wm_stats_trace_delay", "5", "The ammount of time between sending player position updates", FCVAR_NOTIFY, true, 0.0);
 	g_h_rcon_only = CreateConVar("wm_rcon_only", "0", "Enable or disable admin commands to be only executed via RCON or console");
 	g_h_global_chat = CreateConVar("wm_global_chat", "1", "Enable or disable the global chat command (@ prefix in messagemode)");
+	g_h_stv_chat = CreateConVar("wm_tv_chat", "1", "Enable or disable the players chat being relayed to Source TV");
 	g_h_locked = CreateConVar("wm_lock_teams", "1", "Enable or disable locked teams when a match is running", FCVAR_NOTIFY);
 	g_h_min_ready = CreateConVar("wm_min_ready", "10", "Sets the minimum required ready players to Live on 3", FCVAR_NOTIFY);
 	g_h_max_players = CreateConVar("wm_max_players", "10", "Sets the maximum players allowed on both teams combined, others will be forced to spectator (0 = unlimited)", FCVAR_NOTIFY, true, 0.0);
@@ -263,6 +280,7 @@ public OnPluginStart()
 	g_h_live_config = CreateConVar("wm_live_config", "warmod/on_match_lo3.cfg", "Sets the Live on 3 config");
 	g_h_knife_config = CreateConVar("wm_knife_config", "warmod/on_match_ko3.cfg", "Sets the Knife on 3 config");
 	g_h_end_config = CreateConVar("wm_reset_config", "warmod/on_match_end.cfg", "Sets the config to load at the end/reset of a match");
+	g_h_half_time_config = CreateConVar("wm_half_time_config", "warmod/on_match_half_time.cfg", "Sets the config to load at half time of a match (including overtime)");
 	g_h_round_money = CreateConVar("wm_round_money", "1", "Enable or disable a client's team mates money to be displayed at the start of a round (to him only)", FCVAR_NOTIFY);
 	g_h_night_vision = CreateConVar("wm_block_nightvision", "1", "Enable or disable blocking nightvision", FCVAR_NOTIFY);
 	g_h_bomb_frags = CreateConVar("wm_bomb_frags", "0", "Enable or disable a player getting 3 points for their bomb explosion", FCVAR_NOTIFY);
@@ -300,7 +318,6 @@ public OnPluginStart()
 	g_h_deathcam_remove = CreateConVar("wm_remove_deathcam", "1", "Enable or disable the switching of views after wm_remove_deathcam_delay seconds of time after death", FCVAR_NOTIFY);
 	g_h_deathcam_delay = CreateConVar("wm_remove_deathcam_delay", "1.4", "The ammount of time to wait before switching a players view after death", FCVAR_NOTIFY, true, 1.4);
 	g_h_warmup_respawn = CreateConVar("wm_warmup_respawn", "0", "Enable or disable the respawning of players in warmup", FCVAR_NOTIFY);
-	g_h_modifiers = CreateConVar("wm_modifiers", "1", "Enable or disable slight game modifiers (green RCON + short team_say)", FCVAR_NOTIFY);
 	g_h_status = CreateConVar("wm_status", "0", "WarMod automatically updates this value to the corresponding match status code", FCVAR_NOTIFY);
 	g_h_upload_results = CreateConVar("wm_upload_results", "0", "Enable or disable the uploading of match results via MySQL", FCVAR_NOTIFY);
 	g_h_table_name = CreateConVar("wm_table_name", "wm_results", "The MySQL table name to store match results in");
@@ -340,9 +357,9 @@ public OnPluginStart()
 	HookEvent("player_hurt",  Event_Player_Hurt);
 	HookEvent("player_death",  Event_Player_Death);
 	HookEvent("player_changename", Event_Player_Name);
-	HookEvent("player_connect", Event_Player_Connect);
-	HookEvent("player_disconnect", Event_Player_Disc);
+	HookEvent("player_disconnect", Event_Player_Disc_Pre, EventHookMode_Pre);
 	HookEvent("player_team", Event_Player_Team);
+	HookEvent("player_team", Event_Player_Team_Pre, EventHookMode_Pre);
 	
 	HookEvent("bomb_pickup", Event_Bomb_PickUp);
 	HookEvent("bomb_dropped", Event_Bomb_Dropped);
@@ -362,12 +379,11 @@ public OnPluginStart()
 	
 	HookEvent("item_pickup", Event_Item_Pickup);
 	
-	wm_db = MySQL_Connect();
-	
 	CreateTimer(15.0, HelpText, 0, TIMER_REPEAT);
 	CreateTimer(15.0, CheckNames, 0, TIMER_REPEAT);
 	
 	CreateTimer(600.0, LiveWire_Check, 0, TIMER_REPEAT);
+	CreateTimer(1800.0, LiveWire_Ping, _, TIMER_REPEAT);
 }
 
 public OnAllPluginsLoaded()
@@ -386,37 +402,71 @@ public OnPluginEnd()
 	}
 }
 
+public Action:LiveWire_ReConnect(client, args)
+{
+	if (GetConVarBool(g_h_lw_enabled))
+	{
+		LiveWire_Disconnect();
+		LiveWire_Connect();
+	}
+	else
+	{
+		ReplyToCommand(client, "%sLiveWire not enabled!", CHAT_PREFIX);
+	}
+	return Plugin_Handled;
+}
+
 LiveWire_Connect()
 {
 	if (!g_lw_connecting)
 	{
 		g_h_lw_socket = SocketCreate(SOCKET_TCP, OnSocketError);
-		new String:address[32];
+		new String:address[256];
 		GetConVarString(g_h_lw_address, address, sizeof(address));
 		new port = GetConVarInt(g_h_lw_port);
+		
+		// bind socket to ip address - used for servers with multiple ips
+		new String:bindaddress[32];
+		GetConVarString(g_h_lw_bindaddress, bindaddress, sizeof(bindaddress));
+		if (StrEqual(bindaddress, ""))
+		{
+			new octets[4];
+			Steam_GetPublicIP(octets);
+			Format(bindaddress, sizeof(bindaddress), "%d.%d.%d.%d", octets[0], octets[1], octets[2], octets[3]);
+		}
+		// TODO: validate as ip?
+		PrintToServer("<LiveWire> Binding socket to \"%s\"", bindaddress);
+		SocketBind(g_h_lw_socket, bindaddress, 0);
+		
 		PrintToServer("<LiveWire> Connecting to \"%s:%d\"", address, port);
+		
 		SocketConnect(g_h_lw_socket, OnSocketConnected, OnSocketReceive, OnSocketDisconnected, address, port);
 		g_lw_connecting = true;
 	}
 }
 
-LiveWire_Send(const String:Format[], any:...)
+LiveWire_Send(const String:format[], any:...)
 {
-	decl String:buffer[1024];
-	VFormat(buffer, sizeof(buffer), Format, 2);
+	decl String:event[1024];
+	// format arguments
+	VFormat(event, sizeof(event), format, 2);
 	if (GetConVarBool(g_h_lw_enabled) && g_lw_connected)
 	{
-		StrCat(buffer, sizeof(buffer), "\n");
-		SocketSend(g_h_lw_socket, buffer);
+		// add a newline to each event
+		StrCat(event, sizeof(event), "\n");
+		// send to socket
+		SocketSend(g_h_lw_socket, event);
 	}
 }
 
 LiveWire_Disconnect()
 {
 	g_lw_connecting = false;
+	// check if connected
 	if (g_lw_connected)
 	{
 		g_lw_connected = false;
+		// close socket
 		CloseHandle(g_h_lw_socket);
 	}
 }
@@ -430,9 +480,17 @@ public OnSocketConnected(Handle:socket, any:arg)
 	new String:password[512];
 	GetConVarString(g_h_lw_group_name, username, sizeof(username));
 	GetConVarString(g_h_lw_group_password, password, sizeof(password));
-	new String:timestamp[64];
-	FormatTime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S");
-	LiveWire_Send("\"server_status\" (game \"css\") (ip \"%d\") (port \"%d\") (username \"%s\") (password \"%s\") (timestamp \"%s\")", GetConVarInt(FindConVar("hostip")), GetConVarInt(FindConVar("hostport")), username, password, timestamp);
+	
+	new hostIP = GetConVarInt(FindConVar("hostip"));
+	new String:ipAddress[32];
+	// convert ip address to standard dotted notation
+	Format(ipAddress, sizeof(ipAddress), "%d.%d.%d.%d", hostIP >>> 24, 0xFF & (hostIP >>> 16), 0xFF & (hostIP >>> 8), 0xFF & hostIP);
+	
+	EscapeString(username, sizeof(username));
+	EscapeString(password, sizeof(password));
+	LogLiveWireEvent("{\"event\": \"server_status\", \"game\": \"css\", \"version\": \"%s\", \"ip\": \"%s\", \"port\": %d, \"username\": \"%s\", \"password\": \"%s\"}", WM_VERSION, ipAddress, GetConVarInt(FindConVar("hostport")), username, password);
+	
+	LogPlayers(true);
 }
 
 public OnSocketReceive(Handle:socket, String:receiveData[], const dataSize, any:arg)
@@ -458,32 +516,40 @@ public OnSocketError(Handle:socket, const errorType, const errorNum, any:hFile)
 
 public OnMapStart()
 {
+	// store current map
 	GetCurrentMap(g_map, sizeof(g_map));
 	StringToLower(g_map, sizeof(g_map));
+	// reset plugin version cvar
 	SetConVarStringHidden(g_h_notify_version, WM_VERSION);
 	
 	if (LibraryExists("pluginautoupdate") && !GetConVarBool(FindConVar("sv_lan")))
 	{
+		// check for warmod updates
 		ServerCommand("sm_autoupdate_download warmod");
 	}
 	
 	if (GetConVarBool(g_h_lw_enabled) && !g_lw_connected)
 	{
+		// connect to livewire
 		LiveWire_Connect();
 	}
 	
 	if (GetConVarBool(g_h_stats_trace_enabled))
 	{
+		// start trace timer
 		g_stats_trace_timer = CreateTimer(GetConVarFloat(g_h_stats_trace_delay), Stats_Trace, _, TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
 	}
 	
+	// reset any matches
 	ResetMatch(true);
 	
+	// reset timers
 	ResetSwitchCameraTimers(false);
 }
 
 public OnMapEnd()
 {
+	// reset timers
 	ResetSwitchCameraTimers(false);
 }
 
@@ -510,6 +576,7 @@ public OnAdminMenuReady(Handle:topmenu)
 		return;
 	}
 	
+	// add menu items
 	AddToTopMenu(g_h_menu, "forcestart", TopMenuObject_Item, MenuHandler, new_menu, "forcestart", ADMFLAG_CUSTOM1);
 	AddToTopMenu(g_h_menu, "readyup", TopMenuObject_Item, MenuHandler, new_menu, "readyup", ADMFLAG_CUSTOM1);
 	AddToTopMenu(g_h_menu, "knife", TopMenuObject_Item, MenuHandler, new_menu, "knife", ADMFLAG_CUSTOM1);
@@ -520,8 +587,101 @@ public OnAdminMenuReady(Handle:topmenu)
 	AddToTopMenu(g_h_menu, "toggleactive", TopMenuObject_Item, MenuHandler, new_menu, "toggleactive", ADMFLAG_CUSTOM1);
 }
 
+public OnClientConnected(client)
+{
+	new count = 0;
+	for (new i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientConnected(i))
+		{
+			count++;
+		}
+	}
+	if (count == 1)
+	{
+		// reconnect livewire on first player join, server seems to go to sleep
+		// when there are no players in the server (e.g. server start)
+		LiveWire_ReConnect(0, 0);
+	}
+}
+
+public OnClientPostAdminCheck(client)
+{
+	if (client == 0)
+	{
+		return;
+	}
+	
+	new String:ip_address[32];
+	GetClientIP(client, ip_address, sizeof(ip_address));
+	
+	if (!IsFakeClient(client))
+	{
+		// check player for gametech premium status
+		new String:player_name[32];
+		GetClientName(client, player_name, sizeof(player_name));
+		
+		new String:auth_id[32];
+		GetClientAuthString(client, auth_id, sizeof(auth_id));
+		
+		new HTTPRequestHandle:request = Steam_CreateHTTPRequest(HTTPMethod_POST, QUERY_URL);
+		Steam_SetHTTPRequestGetOrPostParameter(request, "command", "player_status");
+		Steam_SetHTTPRequestGetOrPostParameter(request, "name", player_name);
+		Steam_SetHTTPRequestGetOrPostParameter(request, "uniqueId", auth_id);
+		Steam_SetHTTPRequestGetOrPostParameter(request, "ipAddress", ip_address);
+		Steam_SendHTTPRequest(request, OnPremiumCheckComplete, GetClientUserId(client));
+	}
+	
+	if (!IsActive(0, true))
+	{
+		// warmod is disabled
+		return;
+	}
+	
+	if (GetConVarBool(g_h_stats_enabled) && client != 0)
+	{
+		new String:log_string[256];
+		CS_GetLogString(client, log_string, sizeof(log_string));
+		
+		new String:country[2];
+		GeoipCode2(ip_address, country);
+		
+		EscapeString(ip_address, sizeof(ip_address));
+		LogEvent("{\"event\": \"player_connect\", \"player\": %s, \"address\": \"%s\", \"country\": \"%s\"}", log_string, ip_address, country);
+	}
+}
+
+public OnPremiumCheckComplete(HTTPRequestHandle:request, bool:requestSuccessful, HTTPStatusCode:statusCode, any:userId)
+{
+	new client = GetClientOfUserId(userId);
+	
+	if (client == 0 || !requestSuccessful || statusCode != HTTPStatusCode_OK)
+	{
+		Steam_ReleaseHTTPRequest(request);
+		return;
+	}
+	
+	new size = Steam_GetHTTPResponseBodySize(request);
+	new String:data[size];
+	Steam_GetHTTPResponseBodyData(request, data, size);
+	new numParams = 2;
+	new String:params[numParams][MAX_PARAM_SIZE];
+	ExplodeString(data, ";", params, numParams, MAX_PARAM_SIZE);
+	new bool:premium = !!StringToInt(params[0]);
+	g_premium_list[client] = premium;
+	strcopy(g_premium_prefix[client], MAX_PARAM_SIZE, params[1]);
+	
+	if (premium)
+	{
+		WM_PrintToChat(client, "GameTech Premium Features Loaded");
+	}
+	
+	Steam_ReleaseHTTPRequest(request);
+}
+
 public OnClientPutInServer(client)
 {
+	// reset client state
 	user_damage[client][0] = '\0';
 	g_player_list[client] = PLAYER_DISC;
 	g_cancel_list[client] = false;
@@ -529,19 +689,25 @@ public OnClientPutInServer(client)
 
 public OnClientDisconnect(client)
 {
+	// reset client state
 	g_player_list[client] = PLAYER_DISC;
+	g_premium_list[client] = false;
+	g_premium_prefix[client] = "";
 	g_cancel_list[client] = false;
 	user_damage[client][0] = '\0';
 	
+	// log player stats
 	LogPlayerStats(client);
 	
 	if (!IsActive(client, true))
 	{
+		// warmod is disabled
 		return;
 	}
 	
 	if (g_ready_enabled && !g_live)
 	{
+		// display ready system
 		ShowInfo(client, true, false, 0);
 	}
 }
@@ -550,15 +716,18 @@ public Action:OnClientCommand(client, args)
 {
 	if (!IsActive(client, true))
 	{
+		// warmod is disabled
 		return Plugin_Continue;
 	}
 	
 	if (g_h_force_camera == INVALID_HANDLE)
 	{
+		// get camera mode
 		g_h_force_camera = FindConVar("mp_forcecamera");
 	}
 	if (client > 0 && !IsFakeClient(client) && IsClientObserver(client) && GetClientTeam(client) > 1 && g_h_force_camera != INVALID_HANDLE && GetConVarInt(g_h_force_camera) == 1)
 	{
+		// client is spectating, control who they watch!
 		new String:arg[256];
 		GetCmdArg(0, arg, sizeof(arg));
 		if (StrEqual(arg, "spec_prev"))
@@ -589,9 +758,13 @@ ResetMatch(bool:silent)
 		Call_Finish();
 		if (GetConVarBool(g_h_stats_enabled))
 		{
-			Log2Game("\"match_reset\"");
+			new String:event_name[] = "match_reset";
+			LogSimpleEvent(event_name, sizeof(event_name));
 		}
-		LiveWire_Send("\"log_end\"");
+		// end of log
+		new String:event_name[] = "log_end";
+		LogSimpleEvent(event_name, sizeof(event_name));
+		// execute relevant server config
 		new String:end_config[128];
 		GetConVarString(g_h_end_config, end_config, sizeof(end_config));
 		ServerCommand("exec %s", end_config);
@@ -599,10 +772,13 @@ ResetMatch(bool:silent)
 	
 	if (g_log_file != INVALID_HANDLE)
 	{
+		// close log file
+		FlushFile(g_log_file);
 		CloseHandle(g_log_file);
 		g_log_file = INVALID_HANDLE;
 	}
 	
+	// reset state
 	g_match = false;
 	g_live = false;
 	g_first_half = true;
@@ -619,26 +795,32 @@ ResetMatch(bool:silent)
 	g_overtime_count = 0;
 	UpdateStatus();
 	
+	// stop tv recording after 10 seconds
 	CreateTimer(10.0, StopRecord);
 	
 	if (GetConVarBool(g_h_auto_ready))
 	{
+		// enable ready system
 		ReadySystem(true);
 		ShowInfo(0, true, false, 0);
+		// update status code
 		UpdateStatus();
 	}
 	else if (g_ready_enabled)
 	{
+		// disable ready system
 		ReadySystem(false);
 		ShowInfo(0, false, false, 1);
 	}
 	
 	if (!silent)
 	{
+		// message display to players
 		for (new x = 1; x <= 3; x++)
 		{
-			PrintToChatAll("\x03<WarMod> \x04%t", "Match Reset");
+			PrintToChatAll("%s%t", CHAT_PREFIX, "Match Reset");
 		}
+		// restart round
 		ServerCommand("mp_restartgame 1");
 	}
 }
@@ -651,10 +833,12 @@ ResetHalf(bool:silent)
 		Call_Finish();
 		if (GetConVarBool(g_h_stats_enabled))
 		{
-			Log2Game("\"match_half_reset\"");
+			new String:event_name[] = "match_half_reset";
+			LogSimpleEvent(event_name, sizeof(event_name));
 		}
 	}
 	
+	// reset half state
 	g_live = false;
 	g_t_money = false;
 	g_t_score = false;
@@ -667,42 +851,53 @@ ResetHalf(bool:silent)
 	
 	if (GetConVarBool(g_h_auto_ready))
 	{
+		// display ready system
 		ReadySystem(true);
 		ShowInfo(0, true, false, 0);
 		UpdateStatus();
 	}
 	else
 	{
+		// disable ready system
 		ReadySystem(false);
 		ShowInfo(0, false, false, 1);
 	}
 	
 	if (!silent)
 	{
+		// display message for players
 		for (new x = 1; x <= 3; x++)
 		{
-			PrintToChatAll("\x03<WarMod> \x04%t", "Half Reset");
+			PrintToChatAll("%s%t", CHAT_PREFIX, "Half Reset");
 		}
+		// restart round
 		ServerCommand("mp_restartgame 1");
 	}
 }
 
 ResetTeams()
 {
+	// set team names to default
 	g_t_name = DEFAULT_T_NAME;
+	g_t_name_escaped = g_t_name;
+	EscapeString(g_t_name_escaped, sizeof(g_t_name_escaped));
 	g_ct_name = DEFAULT_CT_NAME;
+	g_ct_name_escaped = g_ct_name;
+	EscapeString(g_ct_name_escaped, sizeof(g_ct_name_escaped));
 	SetConVarStringHidden(g_h_t, DEFAULT_T_NAME);
 	SetConVarStringHidden(g_h_ct, DEFAULT_CT_NAME);
 }
 
 ResetMatchScores()
 {
+	// reset match scores
 	g_scores[SCORE_T][SCORE_FIRST_HALF] = 0;
 	g_scores[SCORE_T][SCORE_SECOND_HALF] = 0;
 	
 	g_scores[SCORE_CT][SCORE_FIRST_HALF] = 0;
 	g_scores[SCORE_CT][SCORE_SECOND_HALF] = 0;
 	
+	// reset overtime scores
 	for (new i = 0; i <= g_overtime_count; i++)
 	{
 		g_scores_overtime[SCORE_T][i][SCORE_FIRST_HALF] = 0;
@@ -715,56 +910,69 @@ ResetMatchScores()
 
 ResetHalfScores()
 {
+	// reset scores for the current half
 	if (!g_overtime)
 	{
+		// not overtime
 		if (g_first_half)
 		{
+			// first half
 			g_scores[SCORE_T][SCORE_FIRST_HALF] = 0;
 			g_scores[SCORE_CT][SCORE_FIRST_HALF] = 0;
 		}
 		else
 		{
+			// second half
 			g_scores[SCORE_T][SCORE_SECOND_HALF] = 0;
 			g_scores[SCORE_CT][SCORE_SECOND_HALF] = 0;
 		}
 	}
 	else
 	{
+		// overtime
 		if (g_first_half)
 		{
+			// first half overtime
 			g_scores_overtime[SCORE_T][g_overtime_count][SCORE_FIRST_HALF] = 0;
 			g_scores_overtime[SCORE_CT][g_overtime_count][SCORE_FIRST_HALF] = 0;
 		}
 		else
 		{
+			// second half overtime
 			g_scores_overtime[SCORE_T][g_overtime_count][SCORE_SECOND_HALF] = 0;
 			g_scores_overtime[SCORE_CT][g_overtime_count][SCORE_SECOND_HALF] = 0;
 		}
 	}
 }
 
+
 public Action:ReadyToggle(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
 	if (IsLive(client, false))
 	{
+		// match is live
 		return Plugin_Handled;
 	}
 	
+	// change ready state
 	ReadyChangeAll(client, false, true);
 	SetAllCancelled(false);
 	
 	if (!IsReadyEnabled(client, true))
 	{
+		// display ready system
 		ReadySystem(true);
 		ShowInfo(client, true, false, 0);
 		if (client != 0)
@@ -775,10 +983,12 @@ public Action:ReadyToggle(client, args)
 		{
 			PrintToServer("<WarMod> %T", "Ready System Enabled", LANG_SERVER);
 		}
+		// check if anyone is ready
 		CheckReady();
 	}
 	else
 	{
+		// disable ready system
 		ShowInfo(client, false, false, 1);
 		ReadySystem(false);
 		if (client != 0)
@@ -800,15 +1010,17 @@ public Action:ActiveToggle(client, args)
 {
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
 	if (GetConVarBool(g_h_active))
 	{
+		// disable warmod
 		SetConVarBool(g_h_active, false);
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Set Inactive");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Set Inactive");
 		}
 		else
 		{
@@ -817,10 +1029,11 @@ public Action:ActiveToggle(client, args)
 	}
 	else
 	{
+		// enable warmod
 		SetConVarBool(g_h_active, true);
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Set Active");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Set Active");
 		}
 		else
 		{
@@ -837,11 +1050,13 @@ public Action:ChangeMinReady(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -850,12 +1065,13 @@ public Action:ChangeMinReady(client, args)
 	
 	if (GetCmdArgs() > 0)
 	{
+		// setter
 		GetCmdArg(1, arg, sizeof(arg));
 		minready = StringToInt(arg);
 		SetConVarInt(g_h_min_ready, minready);
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Set Minready", minready);
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Set Minready", minready);
 		}
 		else
 		{
@@ -865,9 +1081,10 @@ public Action:ChangeMinReady(client, args)
 	}
 	else
 	{
+		// getter
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04wm_min_ready = %d", GetConVarInt(g_h_min_ready));
+			PrintToChat(client, "%swm_min_ready = %d", CHAT_PREFIX, GetConVarInt(g_h_min_ready));
 		}
 		else
 		{
@@ -882,11 +1099,13 @@ public Action:ChangeMaxRounds(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -895,12 +1114,13 @@ public Action:ChangeMaxRounds(client, args)
 	
 	if (GetCmdArgs() > 0)
 	{
+		// setter
 		GetCmdArg(1, arg, sizeof(arg));
 		maxrounds = StringToInt(arg);
 		SetConVarInt(g_h_max_rounds, maxrounds);
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Set Maxrounds", maxrounds);
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Set Maxrounds", maxrounds);
 		}
 		else
 		{
@@ -910,9 +1130,10 @@ public Action:ChangeMaxRounds(client, args)
 	}
 	else
 	{
+		// getter
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04wm_max_rounds = %d", GetConVarInt(g_h_max_rounds));
+			PrintToChat(client, "%swm_max_rounds = %d", CHAT_PREFIX, GetConVarInt(g_h_max_rounds));
 		}
 		else
 		{
@@ -927,11 +1148,13 @@ public Action:ChangePassword(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -939,12 +1162,13 @@ public Action:ChangePassword(client, args)
 	
 	if (GetCmdArgs() > 0)
 	{
+		// setter
 		GetCmdArg(1, new_password, sizeof(new_password));
 		ServerCommand("sv_password \"%s\"", new_password);
 		
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Set Password", new_password);
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Set Password", new_password);
 		}
 		else
 		{
@@ -955,11 +1179,12 @@ public Action:ChangePassword(client, args)
 	}
 	else
 	{
+		// getter
 		new String:passwd[128];
 		GetConVarString(FindConVar("sv_password"), passwd, sizeof(passwd));
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04sv_password = '%s'", passwd);
+			PrintToChat(client, "%ssv_password = '%s'", CHAT_PREFIX, passwd);
 		}
 		else
 		{
@@ -974,22 +1199,19 @@ ReadyUp(client)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return;
 	}
 	
-	if (!IsReadyEnabled(client, false))
+	if (!IsReadyEnabled(client, false) || client == 0)
 	{
-		return;
-	}
-	
-	if (client == 0)
-	{
-		PrintToServer("<WarMod> %T", "Console Ready", LANG_SERVER);
+		// ready system not enabled or client is the console
 		return;
 	}
 	
 	if (IsLive(client, false))
 	{
+		// match already live
 		return;
 	}
 	
@@ -997,16 +1219,19 @@ ReadyUp(client)
 	{
 		if (GetClientTeam(client) > 1)
 		{
+			// set player as ready
 			ReadyServ(client, true, false, true, false);
 		}
 		else
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Not on Team");
+			// player is not on a valid team
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Not on Team");
 		}
 	}
 	else
 	{
-		PrintToChat(client, "\x03<WarMod> \x04%t", "Already Ready");
+		// player is already ready
+		PrintToChat(client, "%s%t", CHAT_PREFIX, "Already Ready");
 	}
 }
 
@@ -1014,11 +1239,13 @@ ReadyDown(client)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return;
 	}
 	
 	if (!IsReadyEnabled(client, false) || client == 0)
 	{
+		// ready system not enabled or client is the console
 		return;
 	}
 	
@@ -1027,26 +1254,23 @@ ReadyDown(client)
 		return;
 	}
 	
-	if (client == 0)
-	{
-		PrintToServer("<WarMod> %T", "Console Not Ready", LANG_SERVER);
-		return;
-	}
-	
 	if (g_player_list[client] != PLAYER_UNREADY)
 	{
 		if (GetClientTeam(client) > 1)
 		{
+			// set player as ready
 			ReadyServ(client, false, false, true, false);
 		}
 		else
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Not on Team");
+			// player is not on a valid team
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Not on Team");
 		}
 	}
 	else
 	{
-		PrintToChat(client, "\x03<WarMod> \x04%t", "Already Not Ready");
+		// player is already ready
+		PrintToChat(client, "%s%t", CHAT_PREFIX, "Already Not Ready");
 	}
 }
 
@@ -1054,35 +1278,40 @@ public Action:ForceAllReady(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
 	if (g_ready_enabled)
 	{
+		// force all players to ready
 		ReadyChangeAll(client, true, true);
+		// check if there is enough players
 		CheckReady();
 		
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Forced Ready");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Forced Ready");
 		}
 		else
 		{
 			PrintToConsole(client, "<WarMod> %T", "Forced Ready", LANG_SERVER);
 		}
 		
+		// display ready system
 		ShowInfo(client, true, false, 0);
 	}
 	else
 	{
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Ready System Disabled2");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Ready System Disabled2");
 		}
 		else
 		{
@@ -1099,35 +1328,39 @@ public Action:ForceAllUnready(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
 	if (g_ready_enabled)
 	{
+		// force all players to unready
 		ReadyChangeAll(client, false, true);
 		CheckReady();
 		
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Forced Not Ready");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Forced Not Ready");
 		}
 		else
 		{
 			PrintToServer("<WarMod> %T", "Forced Not Ready", LANG_SERVER);
 		}
 		
+		// display readym system
 		ShowInfo(client, true, false, 0);
 	}
 	else
 	{
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Ready System Disabled2");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Ready System Disabled2");
 		}
 		else
 		{
@@ -1144,14 +1377,17 @@ public Action:ForceStart(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
+	// reset half and restart
 	ResetHalf(true);
 	ShowInfo(0, false, false, 1);
 	SetAllCancelled(false);
@@ -1167,19 +1403,23 @@ public Action:ForceEnd(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		Log2Game("\"force_end\"");
+		new String:event_name[] = "force_end";
+		LogSimpleEvent(event_name, sizeof(event_name));
 	}
 	
+	// reset match
 	ResetMatch(true);
 	
 	LogAction(client, -1, "\"force_end\" (player \"%L\")", client);
@@ -1191,11 +1431,13 @@ public Action:ReadyOn(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -1204,9 +1446,11 @@ public Action:ReadyOn(client, args)
 		return Plugin_Handled;
 	}
 	
+	// reset ready system
 	ReadyChangeAll(client, false, true);
 	SetAllCancelled(false);
 	
+	// enable ready system
 	ReadySystem(true);
 	ShowInfo(client, true, false, 0);
 	if (client != 0)
@@ -1228,11 +1472,13 @@ public Action:ReadyOff(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -1241,11 +1487,13 @@ public Action:ReadyOff(client, args)
 		return Plugin_Handled;
 	}
 	
+	// reset ready system
 	ReadyChangeAll(client, false, true);
 	SetAllCancelled(false);
 	
 	if (IsReadyEnabled(client, true))
 	{
+		// disable ready sytem
 		ShowInfo(client, false, false, 1);
 		ReadySystem(false);
 	}
@@ -1266,6 +1514,7 @@ public Action:ReadyOff(client, args)
 
 public Action:ConsoleScore(client, args)
 {
+	// display score
 	if (g_match)
 	{
 		if (g_live)
@@ -1282,7 +1531,7 @@ public Action:ConsoleScore(client, args)
 		PrintToConsole(client, "<WarMod> %s: [%d] %s: [%d] MR%d", g_t_name, GetTScore(), g_ct_name, GetCTScore(), GetConVarInt(g_h_max_rounds));
 		if (g_overtime)
 		{
-			PrintToConsole(client, "<WarMod> %t%s (%d): [%d] %s: [%d] MR%d", "Score Overtime", g_overtime_count + 1, g_t_name, GetTOTScore(), g_ct_name, GetCTOTScore(), GetConVarInt(g_h_overtime_mr));
+			PrintToConsole(client, "<WarMod> %t (%d): %s: [%d], %s: [%d] MR%d", "Score Overtime", g_overtime_count + 1, g_t_name, GetTOTScore(), g_ct_name, GetCTOTScore(), GetConVarInt(g_h_overtime_mr));
 		}
 	}
 	else
@@ -1300,15 +1549,32 @@ public Action:ConsoleScore(client, args)
 	return Plugin_Handled;
 }
 
+public Action:LastMatch(client, args)
+{
+	// display details of last match to the console
+	if (g_last_scores[SCORE_T] != -1)
+	{
+		PrintToConsole(client, "<WarMod> Last Match: %s [%d] %s [%d] MR%d", g_last_names[SCORE_T], g_last_scores[SCORE_T], g_last_names[SCORE_CT], g_last_scores[SCORE_CT], g_last_maxrounds);
+	}
+	else
+	{
+		PrintToConsole(client, "<WarMod> No Matches Played");
+	}
+	return Plugin_Handled;
+}
+
+
 ShowScore(client)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return;
 	}
 	
 	if (g_match)
 	{
+		// display score
 		if (!g_overtime)
 		{
 			DisplayScore(client, 0, true);
@@ -1320,7 +1586,7 @@ ShowScore(client)
 	}
 	else
 	{
-		PrintToChat(client, "\x03<WarMod> \x04%t", "Match Not In Progress");
+		PrintToChat(client, "%s%t", CHAT_PREFIX, "Match Not In Progress");
 	}
 	
 	return;
@@ -1352,11 +1618,11 @@ DisplayScore(client, msgindex, bool:priv)
 		GetScoreMsg(client, score_msg, sizeof(score_msg), GetTOTScore(), GetCTOTScore());
 		if (priv)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t%s", "Score Overtime", score_msg);
+			PrintToChat(client, "%s%t%s", CHAT_PREFIX, "Score Overtime", score_msg);
 		}
 		else
 		{
-			PrintToChatAll("\x03<WarMod> \x04%t%s", "Score Overtime", score_msg);
+			PrintToChatAll("%s%t%s", CHAT_PREFIX, "Score Overtime", score_msg);
 		}
 	}
 	else if (msgindex == 2) // overall play score
@@ -1365,11 +1631,11 @@ DisplayScore(client, msgindex, bool:priv)
 		GetScoreMsg(client, score_msg, sizeof(score_msg), GetTTotalScore(), GetCTTotalScore());
 		if (priv)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t%s", "Score Overall", score_msg);
+			PrintToChat(client, "%s%t%s", CHAT_PREFIX, "Score Overall", score_msg);
 		}
 		else
 		{
-			PrintToChatAll("\x03<WarMod> \x04%t%s", "Score Overall", score_msg);
+			PrintToChatAll("%s%t%s", CHAT_PREFIX, "Score Overall", score_msg);
 		}
 	}
 }
@@ -1395,6 +1661,7 @@ ReadyInfoPriv(client)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return;
 	}
 	
@@ -1446,7 +1713,7 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		Log2Game("\"round_start\" (freezetime \"%d\")", GetConVarInt(FindConVar("mp_freezetime")));
+		LogEvent("{\"event\": \"round_start\", \"freezeTime\": %d}", GetConVarInt(FindConVar("mp_freezetime")));
 	}
 	
 	CreateTimer(0.1, ShowDamage, false);
@@ -1462,6 +1729,7 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	if (g_t_knife)
 	{
+		// give player specified grenades
 		for (new i = 1; i <= MaxClients; i++)
 		{
 			if (IsClientInGame(i) && GetClientTeam(i) > 1)
@@ -1496,6 +1764,7 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 	new the_money[MAXPLAYERS + 1];
 	new num_players;
 	
+	// sort by money
 	for (new i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) > 1)
@@ -1512,6 +1781,7 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 	new String:has_weapon[1];
 	new pri_weapon;
 	
+	// display team players money
 	for (new i = 1; i <= MaxClients; i++)
 	{
 		for (new x = 0; x < num_players; x++)
@@ -1537,12 +1807,14 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 
 public Action:AskTeamMoney(client, args)
 {
+	// show team money
 	ShowTeamMoney(client);
 	return Plugin_Handled;
 }
 
 stock ShowTeamMoney(client)
 {
+	// show team money
 	new the_money[MAXPLAYERS + 1];
 	new num_players;
 	
@@ -1598,6 +1870,7 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	new winner = GetEventInt(event, "winner");
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		for (new i = 1; i <= MaxClients; i++)
@@ -1609,15 +1882,17 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 			LogPlayerStats(i);
 			LogClutchStats(i);
 		}
-		Log2Game("\"round_end\" (winner \"%d\") (reason \"%d\")", winner, GetEventInt(event, "reason"));
+		LogEvent("{\"event\": \"round_end\", \"winner\": %d, \"reason\": %d}", winner, GetEventInt(event, "reason"));
 	}
 	
 	if (winner > 1 && g_t_score)
 	{
 		if (g_t_knife)
 		{
+			// knife round won
 			if (GetConVarBool(g_h_auto_knife) && GetConVarBool(g_h_auto_ready))
 			{
+				// show ready system
 				ReadyChangeAll(0, false, true);
 				SetAllCancelled(false);
 				ReadySystem(true);
@@ -1625,14 +1900,7 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 			}
 			if (GetConVarBool(g_h_stats_enabled))
 			{
-				if (winner == TERRORIST_TEAM)
-				{
-					Log2Game("\"knife_win\" (team \"%s\")", g_t_name);
-				}
-				else if (winner == COUNTER_TERRORIST_TEAM)
-				{
-					Log2Game("\"knife_win\" (team \"%s\")", g_ct_name);
-				}
+				LogEvent("{\"event\": \"knife_win\", \"team\": %d}", winner);
 			}
 			g_t_knife = false;
 			g_t_had_knife = true;
@@ -1662,6 +1930,7 @@ public Event_Round_Restart(Handle:cvar, const String:oldVal[], const String:newV
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled) && !StrEqual(newVal, "0"))
 	{
 		for (new i = 1; i <= MaxClients; i++)
@@ -1672,7 +1941,7 @@ public Event_Round_Restart(Handle:cvar, const String:oldVal[], const String:newV
 			clutch_stats[i][CLUTCH_FRAGS] = 0;
 			clutch_stats[i][CLUTCH_WON] = 0;
 		}
-		Log2Game("\"round_restart\" (delay \"%s\")", newVal);
+		LogEvent("{\"event\": \"round_restart\", \"delay\": %d}", StringToInt(newVal));
 	}
 }
 
@@ -1683,9 +1952,11 @@ public Event_Round_Freeze_End(Handle:event, const String:name[], bool:dontBroadc
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		Log2Game("\"round_freeze_end\"");
+		new String:event_name[] = "round_freeze_end";
+		LogSimpleEvent(event_name, sizeof(event_name));
 	}
 }
 
@@ -1696,6 +1967,7 @@ public Event_Player_Blind(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new client = GetClientOfUserId(GetEventInt(event, "userid"));
@@ -1703,7 +1975,7 @@ public Event_Player_Blind(Handle:event, const String:name[], bool:dontBroadcast)
 		{
 			new String:log_string[256];
 			CS_GetAdvLogString(client, log_string, sizeof(log_string));
-			Log2Game("\"player_blind\" (player \"%s\") (duration \"%.2f\")", log_string, GetEntPropFloat(client, Prop_Send, "m_flFlashDuration"));
+			LogEvent("{\"event\": \"player_blind\", \"player\": %s, \"duration\": %.2f}", log_string, GetEntPropFloat(client, Prop_Send, "m_flFlashDuration"));
 		}
 	}
 }
@@ -1715,6 +1987,7 @@ public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new attacker = GetClientOfUserId(GetEventInt(event, "attacker"));
@@ -1736,7 +2009,8 @@ public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 				new String:victim_log_string[256];
 				CS_GetAdvLogString(attacker, attacker_log_string, sizeof(attacker_log_string));
 				CS_GetAdvLogString(victim, victim_log_string, sizeof(victim_log_string));
-				Log2Game("\"player_hurt\" (attacker \"%s\") (victim \"%s\") (weapon \"%s\") (damage \"%d\") (damage_armor \"%d\") (hitgroup \"%d\")", attacker_log_string, victim_log_string, weapon, damage, damage_armor, hitgroup);
+				EscapeString(weapon, sizeof(weapon));
+				LogEvent("{\"event\": \"round_start\", \"attacker\": %s, \"victim\": %s, \"weapon\": \"%s\", \"damage\": %d, \"damageArmor\": %d, \"hitGroup\": %d}", attacker_log_string, victim_log_string, weapon, damage, damage_armor, hitgroup);
 			}
 			if (weapon_index > -1)
 			{
@@ -1764,25 +2038,31 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 	new String: weapon[64];
 	GetEventString(event, "weapon", weapon, sizeof(weapon));
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		if (attacker > 0 && victim > 0 && attacker != victim)
 		{
+			// normal frag
 			new String:attacker_log_string[256];
 			new String:victim_log_string[256];
 			CS_GetAdvLogString(attacker, attacker_log_string, sizeof(attacker_log_string));
 			CS_GetAdvLogString(victim, victim_log_string, sizeof(victim_log_string));
-			Log2Game("\"player_death\" (attacker \"%s\") (victim \"%s\") (weapon \"%s\") (headshot \"%d\")", attacker_log_string, victim_log_string, weapon, headshot);
+			EscapeString(weapon, sizeof(weapon));
+			LogEvent("{\"event\": \"player_death\", \"attacker\": %s, \"victim\": %s, \"weapon\": \"%s\", \"headshot\": %d}", attacker_log_string, victim_log_string, weapon, headshot);
 		}
 		else if (victim > 0 && victim == attacker || StrEqual(weapon, "worldspawn"))
 		{
+			// suicide
 			new String:log_string[256];
 			CS_GetAdvLogString(victim, log_string, sizeof(log_string));
 			ReplaceString(weapon, sizeof(weapon), "worldspawn", "world");
-			Log2Game("\"player_suicide\" (player \"%s\") (weapon \"%s\")", log_string, weapon);
+			EscapeString(weapon, sizeof(weapon));
+			LogEvent("{\"event\": \"player_suicide\", \"player\": %s, \"weapon\": \"%s\"}", log_string, weapon);
 		}
 		if (victim > 0)
 		{
+			// record weapon stats
 			new weapon_index = GetWeaponIndex(weapon);
 			if (attacker > 0)
 			{
@@ -1833,6 +2113,7 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	if (!g_live && GetConVarBool(g_h_warmup_respawn))
 	{
+		// respawn if warmup
 		CreateTimer(0.1, RespawnPlayer, victim);
 	}
 	else
@@ -1882,6 +2163,7 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	if (GetConVarBool(g_h_body_remove) && GetNumAlive(GetClientTeam(victim)) > 0)
 	{
+		// remove ragdolls
 		CreateTimer(GetConVarFloat(g_h_body_delay), RemoveRagdoll, victim, TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
@@ -1893,13 +2175,16 @@ public Event_Player_Name(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
-		CS_GetLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		new String:newname[32];
-		GetEventString(event, "newname", newname, sizeof(newname));
-		Log2Game("\"player_name\" (player \"%s\") (new_name \"%s\")", log_string, newname);
+		CS_GetLogString(client, log_string, sizeof(log_string));
+		new String:newName[32];
+		GetEventString(event, "newname", newName, sizeof(newName));
+		EscapeString(newName, sizeof(newName));
+		LogEvent("{\"event\": \"player_name\", \"player\": %s, \"newName\": \"%s\"}", log_string, newName);
 	}
 	
 	if (g_ready_enabled && !g_live)
@@ -1908,7 +2193,7 @@ public Event_Player_Name(Handle:event, const String:name[], bool:dontBroadcast)
 	}
 }
 
-public Event_Player_Connect(Handle:event, const String:name[], bool:dontBroadcast)
+public Event_Player_Disc_Pre(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	if (!IsActive(0, true))
 	{
@@ -1917,32 +2202,48 @@ public Event_Player_Connect(Handle:event, const String:name[], bool:dontBroadcas
 	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	
-	if (GetConVarBool(g_h_stats_enabled) && client != 0)
-	{
-		new String:log_string[256];
-		CS_GetLogString(client, log_string, sizeof(log_string));
-		new String:authip[32];
-		GetEventString(event, "address", authip, sizeof(authip));
-		Log2Game("\"player_connect\" (player \"%s\") (address \"%s\")", log_string, authip);
-	}
-}
-
-public Event_Player_Disc(Handle:event, const String:name[], bool:dontBroadcast)
-{
-	if (!IsActive(0, true))
-	{
-		return;
-	}
-	
-	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled) && client != 0)
 	{
 		new String:log_string[256];
 		CS_GetLogString(client, log_string, sizeof(log_string));
 		new String:reason[128];
 		GetEventString(event, "reason", reason, sizeof(reason));
-		Log2Game("\"player_disconnect\" (player \"%s\") (reason \"%s\")", log_string, reason);
+		EscapeString(reason, sizeof(reason));
+		LogEvent("{\"event\": \"player_disconnect\", \"player\": %s, \"reason\": \"%s\"}", log_string, reason);
+	}
+}
+
+public Event_Player_Team_Pre(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	if (!IsActive(0, true))
+	{
+		return;
+	}
+	
+	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+	new new_team = GetEventInt(event, "team");
+	
+	if (!GetEventBool(event, "silent") && g_premium_list[client] && client > 0)
+	{
+		// silence normal message, create own
+		SetEventBroadcast(event, true);
+		
+		new String:team_name[64];
+		if (new_team == SPECTATOR_TEAM)
+		{
+			strcopy(team_name, sizeof(team_name), "Spectators");
+		}
+		else if (new_team == TERRORIST_TEAM)
+		{
+			strcopy(team_name, sizeof(team_name), "Terrorist force");
+		}
+		else if (new_team == COUNTER_TERRORIST_TEAM)
+		{
+			strcopy(team_name, sizeof(team_name), "Counter-Terrorist force");
+		}
+		
+		PrintToChatAll("%s\x01%N is joining the %s", g_premium_prefix[client], client, team_name);
 	}
 }
 
@@ -1957,15 +2258,17 @@ public Event_Player_Team(Handle:event, const String:name[], bool:dontBroadcast)
 	new old_team = GetEventInt(event, "oldteam");
 	new new_team = GetEventInt(event, "team");
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetLogString(client, log_string, sizeof(log_string));
-		Log2Game("\"player_team\" (player \"%s\") (oldteam \"%d\") (newteam \"%d\")", log_string, old_team, new_team);
+		LogEvent("{\"event\": \"player_team\", \"player\": %s, \"oldTeam\": %d, \"newTeam\": %d}", log_string, old_team, new_team);
 	}
 	
 	if (old_team < 2)
 	{
+		// came from spec/joining server
 		CreateTimer(4.0, ShowPluginInfo, client);
 		if (!g_live && g_ready_enabled && !GetEventBool(event, "disconnect") && !IsFakeClient(client))
 		{
@@ -1975,6 +2278,7 @@ public Event_Player_Team(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	if (old_team == 0)
 	{
+		// joining server
 		CreateTimer(2.0, HelpText, client, TIMER_FLAG_NO_MAPCHANGE);
 		
 		CreateTimer(2.0, AdvertGameTech, client);
@@ -1982,6 +2286,7 @@ public Event_Player_Team(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	if (!g_live && g_ready_enabled && !GetEventBool(event, "disconnect") && !IsFakeClient(client))
 	{
+		// show ready system if applicable
 		if (new_team != SPECTATOR_TEAM)
 		{
 			if (g_player_list[client] == PLAYER_READY)
@@ -2002,9 +2307,11 @@ public Event_Player_Team(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	if (new_team > 1 && !g_live && GetConVarBool(g_h_warmup_respawn))
 	{
+		// spawn player if warmup
 		CreateTimer(0.1, RespawnPlayer, client);
 	}
 }
+
 
 public Event_Bomb_Exploded(Handle:event, const String:name[], bool:dontBroadcast)
 {
@@ -2017,9 +2324,11 @@ public Event_Bomb_Exploded(Handle:event, const String:name[], bool:dontBroadcast
 	
 	if (!GetConVarBool(g_h_bomb_frags) && !g_round_end) // must not be after round end as they no longer get frags
 	{
+		// remove bomb frags
 		SetFrags(client, GetFrags(client) - 3);
 	}
 }
+
 
 public Event_Bomb_PickUp(Handle:event, const String:name[], bool:dontBroadcast)
 {
@@ -2028,11 +2337,12 @@ public Event_Bomb_PickUp(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"bomb_pickup\" (player \"%s\")", log_string);
+		LogEvent("{\"event\": \"bomb_pickup\", \"player\": %s}", log_string);
 	}
 }
 
@@ -2043,11 +2353,12 @@ public Event_Bomb_Dropped(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"bomb_dropped\" (player \"%s\")", log_string);
+		LogEvent("{\"event\": \"bomb_dropped\", \"player\": %s}", log_string);
 	}
 }
 
@@ -2058,11 +2369,12 @@ public Event_Bomb_Plant_Begin(Handle:event, const String:name[], bool:dontBroadc
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"bomb_plant_begin\" (player \"%s\") (site \"%d\")", log_string, GetEventInt(event, "site"));
+		LogEvent("{\"event\": \"bomb_plant_begin\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
 }
 
@@ -2073,11 +2385,12 @@ public Event_Bomb_Plant_Abort(Handle:event, const String:name[], bool:dontBroadc
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"bomb_plant_abort\" (player \"%s\") (site \"%d\")", log_string, GetEventInt(event, "site"));
+		LogEvent("{\"event\": \"bomb_plant_abort\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
 }
 
@@ -2090,11 +2403,12 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"bomb_planted\" (player \"%s\") (site \"%d\") (origin_x \"%d\") (origin_y \"%d\")", log_string, GetEventInt(event, "site"), GetEventInt(event, "posx"), GetEventInt(event, "posy"));
+		LogEvent("{\"event\": \"bomb_planted\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
 }
 
@@ -2107,11 +2421,12 @@ public Event_Bomb_Defuse_Begin(Handle:event, const String:name[], bool:dontBroad
 	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(client, log_string, sizeof(log_string));
-		Log2Game("\"bomb_defuse_begin\" (player \"%s\") (kit \"%d\")", log_string, GetEventInt(event, "site"), GetEventBool(event, "haskit"));
+		LogEvent("{\"event\": \"bomb_defuse_begin\", \"player\": %s, \"kit\": %d}", log_string, GetEventInt(event, "site"), GetEventBool(event, "haskit"));
 	}
 }
 
@@ -2122,11 +2437,12 @@ public Event_Bomb_Defuse_Abort(Handle:event, const String:name[], bool:dontBroad
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"bomb_defuse_abort\" (player \"%s\")", log_string);
+		LogEvent("{\"event\": \"bomb_defuse_abort\", \"player\": %s}", log_string);
 	}
 }
 
@@ -2139,15 +2455,17 @@ public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(client, log_string, sizeof(log_string));
-		Log2Game("\"bomb_defused\" (player \"%s\") (site \"%d\")", log_string, GetEventInt(event, "site"));
+		LogEvent("{\"event\": \"bomb_defused\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
 	
 	if (!GetConVarBool(g_h_defuse_frags))
 	{
+		// remove defuse frags
 		SetFrags(client, GetFrags(client) - 3);
 	}
 }
@@ -2159,6 +2477,7 @@ public Event_Weapon_Fire(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new client = GetClientOfUserId(GetEventInt(event, "userid"));
@@ -2182,11 +2501,12 @@ public Event_Detonate_Flash(Handle:event, const String:name[], bool:dontBroadcas
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"grenade_detonate\" (player \"%s\") (grenade \"flashbang\")", log_string);
+		LogEvent("{\"event\": \"grenade_detonate\", \"player\": %s, \"grenade\": \"flashbang\"}", log_string);
 	}
 }
 
@@ -2197,11 +2517,12 @@ public Event_Detonate_Smoke(Handle:event, const String:name[], bool:dontBroadcas
 		return;
 	}
 	
+	// stats	
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"grenade_detonate\" (player \"%s\") (grenade \"smokegrenade\")", log_string);
+		LogEvent("{\"event\": \"grenade_detonate\", \"player\": %s, \"grenade\": \"smokegrenade\"}", log_string);
 	}
 }
 
@@ -2212,11 +2533,12 @@ public Event_Detonate_HeGrenade(Handle:event, const String:name[], bool:dontBroa
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
-		Log2Game("\"grenade_detonate\" (player \"%s\") (grenade \"hegrenade\")", log_string);
+		LogEvent("{\"event\": \"grenade_detonate\", \"player\": %s, \"grenade\": \"hegrenade\"}", log_string);
 	}
 }
 
@@ -2227,15 +2549,18 @@ public Event_Item_Pickup(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		new String:log_string[256];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		new String:item[64];
 		GetEventString(event, "item", item, sizeof(item));
-		Log2Game("\"item_pickup\" (player \"%s\") (item \"%s\")", log_string, item);
+		EscapeString(item, sizeof(item));
+		LogEvent("{\"event\": \"item_pickup\", \"player\": %s, \"item\": \"%s\"}", log_string, item);
 	}
 }
+
 
 AddScore(team)
 {
@@ -2292,9 +2617,10 @@ AddScore(team)
 		}
 	}
 	
+	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		Log2Game("\"score_update\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+		LogEvent("{\"event\": \"score_update\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 	}
 	
 	SetConVarIntHidden(g_h_t_score, GetTTotalScore());
@@ -2317,17 +2643,17 @@ CheckScores()
 				Call_Finish();
 				if (GetConVarBool(g_h_stats_enabled))
 				{
-					Log2Game("\"half_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+					LogEvent("{\"event\": \"half_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 				}
 				DisplayScore(0, 0, false);
 				
 				if (!GetConVarBool(g_h_auto_swap))
 				{
-					PrintToChatAll("\x03<WarMod> \x04%t", "Half Time");
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Half Time");
 				}
 				else
 				{
-					PrintToChatAll("\x03<WarMod> \x04%t", "Half Time Auto Swap");
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Half Time Auto Swap");
 					CreateTimer(GetConVarFloat(g_h_auto_swap_delay), Swap, TIMER_FLAG_NO_MAPCHANGE);
 				}
 				
@@ -2348,6 +2674,10 @@ CheckScores()
 					ReadySystem(true);
 					CreateTimer(GetConVarFloat(g_h_auto_swap_delay) + 0.5, UpdateInfo, TIMER_FLAG_NO_MAPCHANGE);
 				}
+				
+				new String:half_time_config[128];
+				GetConVarString(g_h_half_time_config, half_time_config, sizeof(half_time_config));
+				ServerCommand("exec %s", half_time_config);
 			}
 			else if (GetTScore() == GetConVarInt(g_h_max_rounds) && GetCTScore() == GetConVarInt(g_h_max_rounds)) // complete draw
 			{
@@ -2355,10 +2685,10 @@ CheckScores()
 				{ // max rounds overtime
 					if (GetConVarBool(g_h_stats_enabled))
 					{
-						Log2Game("\"over_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+						LogEvent("{\"event\": \"over_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 					}
 					DisplayScore(0, 0, false);
-					PrintToChatAll("\x03<WarMod> \x04%t", "Over Time", GetConVarInt(g_h_overtime_mr));
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Over Time", GetConVarInt(g_h_overtime_mr));
 					g_live = false;
 					g_t_money = false;
 					g_overtime = true;
@@ -2378,10 +2708,10 @@ CheckScores()
 				{
 					if (GetConVarBool(g_h_stats_enabled))
 					{
-						Log2Game("\"over_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+						LogEvent("{\"event\": \"over_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 					}
 					DisplayScore(0, 0, false);
-					PrintToChatAll("\x03<WarMod> \x04%t", "Over Time Sudden Death");
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Over Time Sudden Death");
 					g_live = false;
 					g_t_money = false;
 					g_overtime = true;
@@ -2402,9 +2732,11 @@ CheckScores()
 				{
 					Call_StartForward(g_f_on_end_match);
 					Call_Finish();
+					
+					g_last_maxrounds = GetConVarInt(g_h_max_rounds);
 					if (GetConVarBool(g_h_stats_enabled))
 					{
-						Log2Game("\"full_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+						LogEvent("{\"event\": \"full_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 					}
 					if (GetConVarBool(g_h_prefix_logs))
 					{
@@ -2415,14 +2747,18 @@ CheckScores()
 					{
 						CreateTimer(GetConVarFloat(g_h_auto_kick_delay), KickLoserTeam, GetLoserTeam());
 					}
-					PrintToChatAll("\x03<WarMod> \x04%t", "Full Time");
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Full Time");
+					
+					if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
+					{
+						SwitchTeams();
+					}
+					SwitchScores();
+					SetLastScore();
+					
 					if (GetConVarBool(g_h_upload_results))
 					{
 						new match_length = RoundFloat(GetEngineTime() - g_match_start);
-						if (StrEqual(g_t_name, DEFAULT_T_NAME, false) && StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
-						{
-							SwitchTeams();
-						}
 						MySQL_UploadResults(match_length, g_map, GetConVarInt(g_h_max_rounds), GetConVarInt(g_h_overtime_mr), g_overtime_count, GetConVarBool(g_h_play_out), g_t_name, GetTTotalScore(), g_scores[SCORE_T][SCORE_FIRST_HALF], g_scores[SCORE_T][SCORE_SECOND_HALF], GetTOTTotalScore(), g_ct_name, GetCTTotalScore(), g_scores[SCORE_CT][SCORE_FIRST_HALF], g_scores[SCORE_CT][SCORE_SECOND_HALF], GetCTOTTotalScore());
 					}
 					ResetMatch(true);
@@ -2432,27 +2768,33 @@ CheckScores()
 			{
 				Call_StartForward(g_f_on_end_match);
 				Call_Finish();
+				
+				g_last_maxrounds = GetConVarInt(g_h_max_rounds);
 				if (GetConVarBool(g_h_stats_enabled))
 				{
-					Log2Game("\"full_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+					LogEvent("{\"event\": \"full_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 				}
 				if (GetConVarBool(g_h_prefix_logs))
 				{
 					RenameLogs();
 				}
 				DisplayScore(0, 0, false);
-				PrintToChatAll("\x03<WarMod> \x04%t", "Full Time");
+				PrintToChatAll("%s%t", CHAT_PREFIX, "Full Time");
 				if (GetConVarBool(g_h_auto_kick_team))
 				{
 					CreateTimer(GetConVarFloat(g_h_auto_kick_delay), KickLoserTeam, GetLoserTeam());
 				}
+				
+				if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
+				{
+					SwitchTeams();
+				}
+				SwitchScores();
+				SetLastScore();
+				
 				if (GetConVarBool(g_h_upload_results))
 				{
 					new match_length = RoundFloat(GetEngineTime() - g_match_start);
-					if (StrEqual(g_t_name, DEFAULT_T_NAME, false) && StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
-					{
-						SwitchTeams();
-					}
 					MySQL_UploadResults(match_length, g_map, GetConVarInt(g_h_max_rounds), GetConVarInt(g_h_overtime_mr), g_overtime_count, GetConVarBool(g_h_play_out), g_t_name, GetTTotalScore(), g_scores[SCORE_T][SCORE_FIRST_HALF], g_scores[SCORE_T][SCORE_SECOND_HALF], GetTOTTotalScore(), g_ct_name, GetCTTotalScore(), g_scores[SCORE_CT][SCORE_FIRST_HALF], g_scores[SCORE_CT][SCORE_SECOND_HALF], GetCTOTTotalScore());
 				}
 				ResetMatch(true);
@@ -2460,31 +2802,38 @@ CheckScores()
 			else if (!g_playing_out && GetTScore() == GetConVarInt(g_h_max_rounds) + 1 || GetCTScore() == GetConVarInt(g_h_max_rounds) + 1) // full time
 			{
 				DisplayScore(0, 0, false);
-				PrintToChatAll("\x03<WarMod> \x04%t", "Full Time");
+				PrintToChatAll("%s%t", CHAT_PREFIX, "Full Time");
 				
 				if (!GetConVarBool(g_h_play_out))
 				{
 					Call_StartForward(g_f_on_end_match);
 					Call_Finish();
+					
+					g_last_maxrounds = GetConVarInt(g_h_max_rounds);
 					if (GetConVarBool(g_h_stats_enabled))
 					{
-						Log2Game("\"full_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+						LogEvent("{\"event\": \"full_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 					}
 					if (GetConVarBool(g_h_prefix_logs))
 					{
 						RenameLogs();
 					}
+					
 					if (GetConVarBool(g_h_auto_kick_team))
 					{
 						CreateTimer(GetConVarFloat(g_h_auto_kick_delay), KickLoserTeam, GetLoserTeam());
 					}
+					
+					if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
+					{
+						SwitchTeams();
+					}
+					SwitchScores();
+					SetLastScore();
+					
 					if (GetConVarBool(g_h_upload_results))
 					{
 						new match_length = RoundFloat(GetEngineTime() - g_match_start);
-						if (StrEqual(g_t_name, DEFAULT_T_NAME, false) && StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
-						{
-							SwitchTeams();
-						}
 						MySQL_UploadResults(match_length, g_map, GetConVarInt(g_h_max_rounds), GetConVarInt(g_h_overtime_mr), g_overtime_count, GetConVarBool(g_h_play_out), g_t_name, GetTTotalScore(), g_scores[SCORE_T][SCORE_FIRST_HALF], g_scores[SCORE_T][SCORE_SECOND_HALF], GetTOTTotalScore(), g_ct_name, GetCTTotalScore(), g_scores[SCORE_CT][SCORE_FIRST_HALF], g_scores[SCORE_CT][SCORE_SECOND_HALF], GetCTOTTotalScore());
 					}
 					ResetMatch(true);
@@ -2493,10 +2842,10 @@ CheckScores()
 				{
 					if (GetConVarBool(g_h_stats_enabled))
 					{
-						Log2Game("\"full_time_playing_out\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+						LogEvent("{\"event\": \"full_time_playing_out\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 					}
 					g_playing_out = true;
-					PrintToChatAll("\x03<WarMod> \x04%t", "Playing Out Notice", (GetConVarInt(g_h_max_rounds) * 2));
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Playing Out Notice", (GetConVarInt(g_h_max_rounds) * 2));
 				}
 			}
 			else
@@ -2516,17 +2865,17 @@ CheckScores()
 				Call_Finish();
 				if (GetConVarBool(g_h_stats_enabled))
 				{
-					Log2Game("\"over_half_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+					LogEvent("{\"event\": \"over_half_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 				}
 				DisplayScore(0, 1, false);
 				
 				if (!GetConVarBool(g_h_auto_swap))
 				{
-					PrintToChatAll("\x03<WarMod> \x04%t", "Half Time");
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Half Time");
 				}
 				else
 				{
-					PrintToChatAll("\x03<WarMod> \x04%t", "Half Time Auto Swap");
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Half Time Auto Swap");
 					CreateTimer(GetConVarFloat(g_h_auto_swap_delay), Swap, TIMER_FLAG_NO_MAPCHANGE);
 				}
 				
@@ -2548,15 +2897,21 @@ CheckScores()
 					CreateTimer(GetConVarFloat(g_h_auto_swap_delay) + 0.5, UpdateInfo, TIMER_FLAG_NO_MAPCHANGE);
 					CheckReady();
 				}
+				
+				new String:half_time_config[128];
+				GetConVarString(g_h_half_time_config, half_time_config, sizeof(half_time_config));
+				ServerCommand("exec %s", half_time_config);
 			}
 			else if (GetTOTScore() == GetConVarInt(g_h_overtime_mr) && GetCTOTScore() == GetConVarInt(g_h_overtime_mr)) // complete draw
 			{
 				if (g_overtime_mode == 1)
 				{ // max rounds overtime
 					if (GetConVarBool(g_h_stats_enabled))
-						Log2Game("\"over_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+					{
+						LogEvent("{\"event\": \"over_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
+					}
 					DisplayScore(0, 1, false);
-					PrintToChatAll("\x03<WarMod> \x04%t", "Over Time", GetConVarInt(g_h_overtime_mr));
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Over Time", GetConVarInt(g_h_overtime_mr));
 					g_live = false;
 					g_t_money = false;
 					g_overtime_count++;
@@ -2577,29 +2932,37 @@ CheckScores()
 				{
 					Call_StartForward(g_f_on_end_match);
 					Call_Finish();
+					
+					if (GetConVarBool(g_h_stats_enabled))
+					{
+						LogEvent("{\"event\": \"over_full_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
+					}
+					
+					g_last_maxrounds = GetConVarInt(g_h_max_rounds);
 					if (GetConVarBool(g_h_auto_kick_team))
 					{
 						CreateTimer(GetConVarFloat(g_h_auto_kick_delay), KickLoserTeam, GetLoserTeam());
 					}
+					
+					if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
+					{
+						SwitchTeams();
+					}
+					SwitchScores();
+					SetLastScore();
+					
 					if (GetConVarBool(g_h_upload_results))
 					{
 						new match_length = RoundFloat(GetEngineTime() - g_match_start);
-						if (StrEqual(g_t_name, DEFAULT_T_NAME, false) && StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
-						{
-							SwitchTeams();
-						}
 						MySQL_UploadResults(match_length, g_map, GetConVarInt(g_h_max_rounds), GetConVarInt(g_h_overtime_mr), g_overtime_count, GetConVarBool(g_h_play_out), g_t_name, GetTTotalScore(), g_scores[SCORE_T][SCORE_FIRST_HALF], g_scores[SCORE_T][SCORE_SECOND_HALF], GetTOTTotalScore(), g_ct_name, GetCTTotalScore(), g_scores[SCORE_CT][SCORE_FIRST_HALF], g_scores[SCORE_CT][SCORE_SECOND_HALF], GetCTOTTotalScore());
 					}
-					if (GetConVarBool(g_h_stats_enabled))
-					{
-						Log2Game("\"over_full_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
-					}
+					
 					if (GetConVarBool(g_h_prefix_logs))
 					{
 						RenameLogs();
 					}
 					DisplayScore(0, 2, false);
-					PrintToChatAll("\x03<WarMod> \x04%t", "Full Time");
+					PrintToChatAll("%s%t", CHAT_PREFIX, "Full Time");
 					ResetMatch(true);
 					return;
 				}
@@ -2608,27 +2971,32 @@ CheckScores()
 			{
 				Call_StartForward(g_f_on_end_match);
 				Call_Finish();
+				
 				if (GetConVarBool(g_h_auto_kick_team))
 				{
 					CreateTimer(GetConVarFloat(g_h_auto_kick_delay), KickLoserTeam, GetLoserTeam());
 				}
 				if (GetConVarBool(g_h_stats_enabled))
 				{
-					Log2Game("\"over_full_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+					LogEvent("{\"event\": \"over_full_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 				}
 				if (GetConVarBool(g_h_prefix_logs))
 				{
 					RenameLogs();
 				}
 				DisplayScore(0, 2, false);
-				PrintToChatAll("\x03<WarMod> \x04%t", "Full Time");
+				PrintToChatAll("%s%t", CHAT_PREFIX, "Full Time");
+				
+				if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
+				{
+					SwitchTeams();
+				}
+				SwitchScores();
+				SetLastScore();
+				
 				if (GetConVarBool(g_h_upload_results))
 				{
 					new match_length = RoundFloat(GetEngineTime() - g_match_start);
-					if (StrEqual(g_t_name, DEFAULT_T_NAME, false) && StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
-					{
-						SwitchTeams();
-					}
 					MySQL_UploadResults(match_length, g_map, GetConVarInt(g_h_max_rounds), GetConVarInt(g_h_overtime_mr), g_overtime_count, GetConVarBool(g_h_play_out), g_t_name, GetTTotalScore(), g_scores[SCORE_T][SCORE_FIRST_HALF], g_scores[SCORE_T][SCORE_SECOND_HALF], GetTOTTotalScore(), g_ct_name, GetCTTotalScore(), g_scores[SCORE_CT][SCORE_FIRST_HALF], g_scores[SCORE_CT][SCORE_SECOND_HALF], GetCTOTTotalScore());
 				}
 				ResetMatch(true);
@@ -2652,17 +3020,17 @@ CheckScores()
 			Call_Finish();
 			if (GetConVarBool(g_h_stats_enabled))
 			{
-				Log2Game("\"half_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+				LogEvent("{\"event\": \"half_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 			}
 			DisplayScore(0, 0, false);
 			
 			if (!GetConVarBool(g_h_auto_swap))
 			{
-				PrintToChatAll("\x03<WarMod> \x04%t", "Half Time");
+				PrintToChatAll("%s%t", CHAT_PREFIX, "Half Time");
 			}
 			else
 			{
-				PrintToChatAll("\x03<WarMod> \x04%t", "Half Time Auto Swap");
+				PrintToChatAll("%s%t", CHAT_PREFIX, "Half Time Auto Swap");
 				CreateTimer(GetConVarFloat(g_h_auto_swap_delay), Swap, TIMER_FLAG_NO_MAPCHANGE);
 			}
 			
@@ -2683,14 +3051,20 @@ CheckScores()
 				ReadySystem(true);
 				CreateTimer(GetConVarFloat(g_h_auto_swap_delay) + 0.5, UpdateInfo, TIMER_FLAG_NO_MAPCHANGE);
 			}
+			
+			new String:half_time_config[128];
+			GetConVarString(g_h_half_time_config, half_time_config, sizeof(half_time_config));
+			ServerCommand("exec %s", half_time_config);
 		}
 		else if (GetTScore() == GetConVarInt(g_h_max_rounds) || GetCTScore() == GetConVarInt(g_h_max_rounds))
 		{
 			Call_StartForward(g_f_on_end_match);
 			Call_Finish();
+			
+			g_last_maxrounds = GetConVarInt(g_h_max_rounds);
 			if (GetConVarBool(g_h_stats_enabled))
 			{
-				Log2Game("\"full_time\" \"%s\" \"%d\" \"%s\" \"%d\"", g_t_name, GetTTotalScore(), g_ct_name, GetCTTotalScore());
+				LogEvent("{\"event\": \"full_time\", \"teams\": [{\"name\": \"%s\", \"team\": %d, \"score\": %d}, {\"name\": \"%s\", \"team\": %d, \"score\": %d}]}", g_t_name_escaped, TERRORIST_TEAM, GetTTotalScore(), g_ct_name_escaped, COUNTER_TERRORIST_TEAM, GetCTTotalScore());
 			}
 			if (GetConVarBool(g_h_prefix_logs))
 			{
@@ -2701,14 +3075,18 @@ CheckScores()
 			{
 				CreateTimer(GetConVarFloat(g_h_auto_kick_delay), KickLoserTeam, GetLoserTeam());
 			}
-			PrintToChatAll("\x03<WarMod> \x04%t", "Full Time");
+			PrintToChatAll("%s%t", CHAT_PREFIX, "Full Time");
+			
+			if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
+			{
+				SwitchTeams();
+			}
+			SwitchScores();
+			SetLastScore();
+			
 			if (GetConVarBool(g_h_upload_results))
 			{
 				new match_length = RoundFloat(GetEngineTime() - g_match_start);
-				if (StrEqual(g_t_name, DEFAULT_T_NAME, false) && StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
-				{
-					SwitchTeams();
-				}
 				MySQL_UploadResults(match_length, g_map, GetConVarInt(g_h_max_rounds), GetConVarInt(g_h_overtime_mr), g_overtime_count, GetConVarBool(g_h_play_out), g_t_name, GetTTotalScore(), g_scores[SCORE_T][SCORE_FIRST_HALF], g_scores[SCORE_T][SCORE_SECOND_HALF], GetTOTTotalScore(), g_ct_name, GetCTTotalScore(), g_scores[SCORE_CT][SCORE_FIRST_HALF], g_scores[SCORE_CT][SCORE_SECOND_HALF], GetCTOTTotalScore());
 			}
 			ResetMatch(true);
@@ -2819,24 +3197,24 @@ ReadyServ(client, bool:ready, bool:silent, bool:show, bool:priv)
 	{
 		if (GetConVarBool(g_h_stats_enabled) && g_player_list[client] == PLAYER_UNREADY)
 		{
-			Log2Game("\"player_ready\" \"%s\"", log_string);
+			LogEvent("{\"event\": \"player_ready\", \"player\": %s}", log_string);
 		}
 		g_player_list[client] = PLAYER_READY;
 		if (!silent)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Ready");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Ready");
 		}
 	}
 	else
 	{
 		if (GetConVarBool(g_h_stats_enabled) && g_player_list[client] == PLAYER_READY)
 		{
-			Log2Game("\"player_unready\" \"%s\"", log_string);
+			LogEvent("{\"event\": \"player_unready\", \"player\": %s}", log_string);
 		}
 		g_player_list[client] = PLAYER_UNREADY;
 		if (!silent)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Not Ready");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Not Ready");
 		}
 	}
 	
@@ -2915,17 +3293,18 @@ LiveOn3(bool:e_war)
 		new String:ct_name[64];
 		t_name = g_t_name;
 		ct_name = g_ct_name;
+		
 		StripFilename(t_name, sizeof(t_name));
 		StripFilename(ct_name, sizeof(ct_name));
 		StringToLower(t_name, sizeof(t_name));
 		StringToLower(ct_name, sizeof(ct_name));
 		if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) || !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 		{
-			Format(g_log_filename, sizeof(g_log_filename), "%s-%s-%s-vs-%s", date, g_map, t_name, ct_name);
+			Format(g_log_filename, sizeof(g_log_filename), "%s-%04x-%s-%s-vs-%s", date, GetConVarInt(FindConVar("hostport")), g_map, t_name, ct_name);
 		}
 		else
 		{
-			Format(g_log_filename, sizeof(g_log_filename), "%s-%s", date, g_map);
+			Format(g_log_filename, sizeof(g_log_filename), "%s-%04x-%s", date, GetConVarInt(FindConVar("hostport")), g_map);
 		}
 		
 		new String:save_dir[128];
@@ -2965,7 +3344,9 @@ LiveOn3(bool:e_war)
 				g_log_file = OpenFile(filepath, "w");
 				g_log_warmod_dir = false;
 			}
-			LiveWire_Send("\"log_start\"");
+			
+			new String:event_name[] = "log_start";
+			LogSimpleEvent(event_name, sizeof(event_name));
 		}
 		
 		LogPlayers();
@@ -2982,12 +3363,14 @@ LiveOn3(bool:e_war)
 	
 	g_match = true;
 	g_live = true;
+	SetConVarIntHidden(g_h_t_score, GetTTotalScore());
+	SetConVarIntHidden(g_h_ct_score, GetCTTotalScore());
 	
 	CreateTimer(10.0, AdvertGameTechSpecs);
 	
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		Log2Game("\"live_on_3\" (map \"%s\") (t \"%s\") (ct \"%s\") (status \"%d\") (version \"%s\")", g_map, g_t_name, g_ct_name, UpdateStatus(), WM_VERSION);
+		LogEvent("{\"event\": \"live_on_3\", \"map\": \"%s\", \"teams\": [{\"name\": \"%s\", \"team\": %d}, {\"name\": \"%s\", \"team\": %d}], \"status\": %d, \"version\": \"%s\"}", g_map, g_t_name_escaped, TERRORIST_TEAM, g_ct_name_escaped, COUNTER_TERRORIST_TEAM, UpdateStatus(), WM_VERSION);
 	}
 }
 
@@ -3083,11 +3466,13 @@ public Action:KnifeOn3(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -3096,7 +3481,7 @@ public Action:KnifeOn3(client, args)
 	
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		Log2Game("\"knife_on_3\" (map \"%s\") (t \"%s\") (ct \"%s\")", g_map, g_t_name, g_ct_name);
+		LogEvent("{\"event\": \"knife_on_3\", \"map\": \"%s\", \"teams\": [{\"name\": \"%s\", \"team\": %d}, {\"name\": \"%s\", \"team\": %d}]}", g_map, g_t_name_escaped, TERRORIST_TEAM, g_ct_name_escaped, COUNTER_TERRORIST_TEAM);
 	}
 	
 	new String:match_config[64];
@@ -3207,14 +3592,14 @@ public Action:ChooseTeam(client, args)
 	
 	if (g_match && GetClientTeam(client) > 1 && GetConVarBool(g_h_locked))
 	{
-		PrintToChat(client, "\x03<WarMod> \x04%t", "Change Teams Midgame");
+		PrintToChat(client, "%s%t", CHAT_PREFIX, "Change Teams Midgame");
 		return Plugin_Stop;
 	}
 	
 	new max_players = GetConVarInt(g_h_max_players);
 	if ((g_ready_enabled || g_match) && max_players != 0 && GetClientTeam(client) <= 1 && CS_GetPlayingCount() >= max_players)
 	{
-		PrintToChat(client, "\x03<WarMod> \x04%t", "Maximum Players");
+		PrintToChat(client, "%s%t", CHAT_PREFIX, "Maximum Players");
 		ChangeClientTeam(client, SPECTATOR_TEAM);
 		return Plugin_Stop;
 	}
@@ -3238,7 +3623,7 @@ public Action:RestrictBuy(client, args)
 	GetCmdArgString(arg, 128);
 	if (StrEqual(arg, "nvgs", false) && GetConVarBool(g_h_night_vision))
 	{
-		PrintToChat(client, "\x03<WarMod> \x04%t", "Nightvision Blocked");
+		PrintToChat(client, "%s%t", CHAT_PREFIX, "Nightvision Blocked");
 		return Plugin_Handled;
 	}
 	
@@ -3251,7 +3636,7 @@ public Action:RestrictBuy(client, args)
 		
 		if (StrContains(the_weapon, "hegren", false) != -1 || StrContains(the_weapon, "flash", false) != -1 || StrContains(the_weapon, "smokegrenade", false) != -1)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Grenades Blocked");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Grenades Blocked");
 			return Plugin_Handled;
 		}
 	}
@@ -3263,6 +3648,7 @@ public Action:ReadyList(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
@@ -3305,11 +3691,13 @@ public Action:NotLive(client, args)
 { 
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -3329,11 +3717,13 @@ public Action:CancelMatch(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -3353,11 +3743,13 @@ public Action:CancelKnife(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -3365,7 +3757,8 @@ public Action:CancelKnife(client, args)
 	{
 		if (GetConVarBool(g_h_stats_enabled))
 		{
-			Log2Game("\"knife_reset\"");
+			new String:event_name[] = "knife_reset";
+			LogSimpleEvent(event_name, sizeof(event_name));
 		}
 		
 		g_t_knife = false;
@@ -3373,7 +3766,7 @@ public Action:CancelKnife(client, args)
 		ServerCommand("mp_restartgame 1");
 		for (new x = 1; x <= 3; x++)
 		{
-			PrintToChatAll("\x03<WarMod> \x04%t", "Knife Round Cancelled");
+			PrintToChatAll("%s%t", CHAT_PREFIX, "Knife Round Cancelled");
 		}
 		if (client == 0)
 		{
@@ -3384,7 +3777,7 @@ public Action:CancelKnife(client, args)
 	{
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Knife Round Inactive");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Knife Round Inactive");
 		}
 		else
 		{
@@ -3405,7 +3798,7 @@ ReadySystem(bool:enable)
 	{
 		if (GetConVarBool(g_h_stats_enabled))
 		{
-			Log2Game("\"ready_system\" \"enable\"");
+			LogEvent("{\"event\": \"ready_system\", \"enabled\": true}");
 		}
 		g_ready_enabled = true;
 	}
@@ -3413,7 +3806,7 @@ ReadySystem(bool:enable)
 	{
 		if (GetConVarBool(g_h_stats_enabled))
 		{
-			Log2Game("\"ready_system\" \"disable\"");
+			LogEvent("{\"event\": \"ready_system\", \"enabled\": false}");
 		}
 		g_ready_enabled = false;
 	}
@@ -3516,7 +3909,8 @@ ReadyChangeAll(client, bool:up, bool:silent)
 	{
 		if (GetConVarBool(g_h_stats_enabled))
 		{
-			Log2Game("\"ready_all\"");
+			new String:event_name[] = "ready_all";
+			LogSimpleEvent(event_name, sizeof(event_name));
 		}
 		for (new i = 1; i <= MaxClients; i++)
 		{
@@ -3530,7 +3924,9 @@ ReadyChangeAll(client, bool:up, bool:silent)
 	{
 		if (GetConVarBool(g_h_stats_enabled))
 		{
-			Log2Game("\"unready_all\"");
+			new String:event_name[] = "unready_all";
+			LogSimpleEvent(event_name, sizeof(event_name));
+			
 		}
 		for (new i = 1; i <= MaxClients; i++)
 		{
@@ -3558,7 +3954,7 @@ IsReadyEnabled(client, bool:silent)
 		{
 			if (client != 0)
 			{
-				PrintToChat(client, "\x03<WarMod> \x04%t", "Ready System Disabled2");
+				PrintToChat(client, "%s%t", CHAT_PREFIX, "Ready System Disabled2");
 			}
 			else
 			{
@@ -3581,7 +3977,7 @@ IsLive(client, bool:silent)
 		{
 			if (client != 0)
 			{
-				PrintToChat(client, "\x03<WarMod> \x04%t", "Match Is Live");
+				PrintToChat(client, "%s%t", CHAT_PREFIX, "Match Is Live");
 			}
 			else
 			{
@@ -3604,7 +4000,7 @@ IsActive(client, bool:silent)
 		{
 			if (client != 0)
 			{
-				PrintToChat(client, "\x03<WarMod> \x04%t", "WarMod Inactive");
+				PrintToChat(client, "%s%t", CHAT_PREFIX, "WarMod Inactive");
 			}
 			else
 			{
@@ -3625,7 +4021,7 @@ IsAdminCmd(client, bool:silent)
 	{
 		if (!silent)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "WarMod Rcon Only");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "WarMod Rcon Only");
 		}
 	}
 	return false;
@@ -3743,6 +4139,8 @@ public OnTChange(Handle:cvar, const String:oldVal[], const String:newVal[])
 		Format(g_t_name, sizeof(g_t_name), "%s", DEFAULT_T_NAME);
 		SetConVarStringHidden(g_h_t, DEFAULT_T_NAME);
 	}
+	g_t_name_escaped = g_t_name;
+	EscapeString(g_t_name_escaped, sizeof(g_t_name_escaped));
 	
 	CheckReady();
 }
@@ -3758,6 +4156,8 @@ public OnCTChange(Handle:cvar, const String:oldVal[], const String:newVal[])
 		Format(g_ct_name, sizeof(g_ct_name), "%s", DEFAULT_CT_NAME);
 		SetConVarStringHidden(g_h_ct, DEFAULT_CT_NAME);
 	}
+	g_ct_name_escaped = g_ct_name;
+	EscapeString(g_ct_name_escaped, sizeof(g_ct_name_escaped));
 	
 	CheckReady();
 }
@@ -3793,11 +4193,13 @@ public Action:ChangeT(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -3807,10 +4209,12 @@ public Action:ChangeT(client, args)
 	{
 		GetCmdArgString(name, sizeof(name));
 		Format(g_t_name, sizeof(g_t_name), "%s", name);
+		g_t_name_escaped = g_t_name;
+		EscapeString(g_t_name_escaped, sizeof(g_t_name_escaped));
 		SetConVarStringHidden(g_h_t, name);
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Change T Name", name);
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Change T Name", name);
 		}
 		else
 		{
@@ -3824,7 +4228,7 @@ public Action:ChangeT(client, args)
 		GetConVarString(g_h_t, name, sizeof(name));
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04wm_t = %s", name);
+			PrintToChat(client, "%swm_t = %s", CHAT_PREFIX, name);
 		}
 		else
 		{
@@ -3839,11 +4243,13 @@ public Action:ChangeCT(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -3853,10 +4259,12 @@ public Action:ChangeCT(client, args)
 	{
 		GetCmdArgString(name, sizeof(name));
 		Format(g_ct_name, sizeof(g_ct_name), "%s", name);
+		g_ct_name_escaped = g_ct_name;
+		EscapeString(g_ct_name_escaped, sizeof(g_ct_name_escaped));
 		SetConVarStringHidden(g_h_ct, name);
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04%t", "Change CT Name", name);
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "Change CT Name", name);
 		}
 		else
 		{
@@ -3870,7 +4278,7 @@ public Action:ChangeCT(client, args)
 		GetConVarString(g_h_ct, name, sizeof(name));
 		if (client != 0)
 		{
-			PrintToChat(client, "\x03<WarMod> \x04wm_ct = %s", name);
+			PrintToChat(client, "%swm_ct = %s", CHAT_PREFIX, name);
 		}
 		else
 		{
@@ -3881,87 +4289,142 @@ public Action:ChangeCT(client, args)
 	return Plugin_Handled;
 }
 
-public Action:SayChat(client, args)
+/*********************************************************
+ *  Display message from player, simulates say and say_team
+ * 
+ * @noreturn
+ *********************************************************/
+
+stock SayText2(client, const String:message[], bool:teamOnly=false, bool:silence=false)
 {
-	if (!IsActive(0, true))
+	if (!silence)
 	{
-		return Plugin_Continue;
-	}
-	
-	if (client == 0 && args != 0)
-	{
-		if (GetConVarBool(g_h_modifiers))
-		{
-			new String:text[192];
-			GetCmdArgString(text, sizeof(text));		
-			PrintToChatAll("\x03%t\x01%s", "Console", text);
-			LogToGame("\"%L\" say \"%s\"", client, text);
-			return Plugin_Handled;
-		}
-		else
-		{
-			return Plugin_Continue;
-		}
-	}
-	else
-	{
-		new String:text[192];
-		new start_index;
-		GetCmdArgString(text, sizeof(text));
+		new String:client_name[32];
+		GetClientName(client, client_name, sizeof(client_name));
+		new client_team = GetClientTeam(client);
+		new client_list[MAXPLAYERS + 1];
+		new client_num = 0;
+		new includeSTV = GetConVarBool(g_h_stv_chat);
 		
-		if (text[strlen(text)-1] == '"')
+		for (new i = 1; i <= MaxClients; i++)
 		{
-			text[strlen(text)-1] = '\0';
-			start_index = 1;
-		}
-		
-		if (text[start_index] == '@' && GetConVarBool(g_h_global_chat))
-		{
-			if (CheckAdminForChat(client))
+			if (
+				IsClientInGame(i) // valid client
+				&& (IsPlayerAlive(client) || !IsPlayerAlive(i)) // either player is alive or target is dead
+				&& (!teamOnly || GetClientTeam(i) == client_team) // either don't care about team or same team
+				&& (includeSTV || !IsFakeClient(i)) // either don't care about bots or they are human
+			)
 			{
-				new String:message[192];
-				strcopy(message, 192, text[start_index + 1]);
-				
-				for (new i = 1; i <= MaxClients; i++)
-				{
-					if (IsClientInGame(i) && !IsFakeClient(i))
-					{
-						PrintToChat(i, "\x03%t\x01%s", "Console", message);
-					}
-				}
-				
-				LogToGame("\"%L\" say \"%s\"", 0, message);
+				client_list[client_num] = i;
+				client_num++;
+			}
+		}
+		
+		new String:status_prefix[10] = "";
+		if (!IsPlayerAlive(client))
+		{
+			if (client_team == SPECTATOR_TEAM)
+			{
+				strcopy(status_prefix, sizeof(status_prefix), "*SPEC* ");
 			}
 			else
 			{
-				PrintToChat(client, "\03<WarMod> \x04%t", "No Permission");
+				strcopy(status_prefix, sizeof(status_prefix), "*DEAD* ");
 			}
-			return Plugin_Handled;
 		}
 		
-		new msg_start;
-		
-		if (text[start_index] == '!' || text[start_index] == '.' || text[start_index] == '/')
+		new String:team_prefix[10] = "";
+		if (teamOnly)
 		{
-			msg_start = 1;
+			strcopy(team_prefix, sizeof(team_prefix), "\x01(TEAM) ");
 		}
 		
-		new String:message[192];
-		strcopy(message, 192, text[start_index + msg_start]);
+		new Handle:h_message = StartMessage("SayText2", client_list, client_num);
+		BfWriteByte(h_message, client);
+		BfWriteByte(h_message, true);
+		new String:format[256];
 		
-		new String:name[64];
-		GetClientName(client, name, sizeof(name));
+		Format(format, sizeof(format), "\x01%s\x01%s%s\x03%%s1 \x01:  %%s2", g_premium_prefix[client], status_prefix, team_prefix);
+		BfWriteString(h_message, format);
 		
-		if (msg_start == 0)
+		BfWriteString(h_message, client_name);
+		BfWriteString(h_message, message);
+		EndMessage();
+	}
+	
+	new String:log_string[192];
+	CS_GetLogString(client, log_string, sizeof(log_string));
+	
+	LogEvent("{\"event\": \"player_say\", \"player\": %s, \"message\": \"%s\", \"teamOnly\": %d}", log_string, message, teamOnly);
+	
+	new String:standard_log_string[192];
+	CS_GetStandardLogString(client, standard_log_string, sizeof(standard_log_string));
+	
+	if (teamOnly)
+	{
+		LogToGame("\"%s\" say_team \"%s\"", standard_log_string, message);
+	}
+	else
+	{
+		LogToGame("\"%s\" say \"%s\"", standard_log_string, message);
+	}
+}
+
+public Action:SayChat(client, args)
+{
+	if (!IsActive(0, true) || args < 1)
+	{
+		// warmod is disabled or no arguments
+		return Plugin_Continue;
+	}
+	
+	new String:type[32];
+	GetCmdArg(0, type, sizeof(type));
+	
+	new bool:teamOnly = false;
+	new bool:silence = false;
+	
+	if (StrEqual(type, "say_team", false))
+	{
+		// true if not console, as console is always global
+		teamOnly = !! client;
+	}
+	
+	new String:message[192];
+	GetCmdArgString(message, sizeof(message));
+	StripQuotes(message);
+	
+	if (client == 0)
+	{
+		PrintToChatAll("\x03%t\x01%s", "Console", message);
+		silence = true;
+	}
+	else if (message[0] == '@' && message[1] != '\0' && GetConVarBool(g_h_global_chat))
+	{
+		if (CheckAdminForChat(client))
 		{
-			return Plugin_Continue;
+			for (new i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && !IsFakeClient(i))
+				{
+					PrintToChat(i, "\x03%t\x01%s", "Console", message[1]);
+				}
+			}
+			silence = true;
 		}
-		
+		else
+		{
+			PrintToChat(client, "\03<WarMod> \x04%t", "No Permission");
+		}
+	}
+	else if (message[0] == '!' || message[0] == '.' || message[0] == '/')
+	{
 		new String:command[192];
-		new String:split_str[8][32];
-		ExplodeString(text[start_index + msg_start], " ", split_str, 8, 32);
-		strcopy(command, 192, split_str[0]);
+		new String:message_parts[2][32];
+		ExplodeString(message[1], " ", message_parts, 2, 32);
+		strcopy(command, 192, message_parts[0]);
 		
+		new validCommand = true;
 		if (StrEqual(command, "ready", false) || StrEqual(command, "rdy", false) || StrEqual(command, "r", false))
 		{
 			ReadyUp(client);
@@ -3985,151 +4448,147 @@ public Action:SayChat(client, args)
 				PrintToChat(client, "\03<WarMod> \x04%t", "ShowInfo Disabled");
 			}
 		}
+		else if (StrEqual(command, "whois", false) || StrEqual(command, "w", false))
+		{
+			if (g_premium_list[client])
+			{
+				WhoIs(client, message[strlen(command) + 2]);
+			}
+			else
+			{
+				PrintToChat(client, "\03<WarMod> \x04GameTech Premium Member Feature");
+			}
+		}
 		else if (StrEqual(command, "help", false))
 		{
 			DisplayHelp(client);
 		}
 		else
 		{
-			return Plugin_Continue;
+			validCommand = false;
 		}
 		
-		new String:LogString[192];
-		CS_GetLogString(client, LogString, sizeof(LogString));
-		LogToGame("\"%s\" say \"%s\"", LogString, text[start_index]);
-		
-		return Plugin_Handled;
+		if (validCommand && !silence)
+		{
+			silence = true;
+		}
 	}
-}
-
-public Action:SayTeamChat(client, args)
-{
-	if (!IsActive(0, true))
+	
+	if (IsChatTrigger())
 	{
 		return Plugin_Continue;
 	}
 	
-	if (client != 0 && args != 0)
+	SayText2(client, message, teamOnly, silence);
+	
+	return Plugin_Handled;
+}
+
+WhoIs(client, String:query[])
+{
+	if (!IsActive(0, true))
 	{
-		new String:text[192];
-		GetCmdArgString(text, sizeof(text));
-		
-		new start_index;
-		if (text[strlen(text)-1] == '"')
-		{
-			text[strlen(text)-1] = '\0';
-			start_index = 1;
-		}
-		
-		new String:LogString[192];
-		CS_GetLogString(client, LogString, sizeof(LogString));
-		
-		LogToGame("\"%s\" say_team \"%s\"", LogString, text[start_index]);
-		
-		new msg_start = 0;
-		
-		if (text[start_index] == '!' || text[start_index] == '.' || text[start_index] == '/')
-		{
-			msg_start = 1;
-		}
-		
-		new String:message[192];
-		strcopy(message, 192, text[start_index + msg_start]);
-		
-		new client_team = GetClientTeam(client);
-		new String:client_name[32];
-		GetClientName(client, client_name, sizeof(client_name));
-		
-		if (msg_start == 1)
-		{
-			new String:command[192];
-			new String:split_str[8][32];
-			ExplodeString(text[start_index + msg_start], " ", split_str, 8, 32);
-			strcopy(command, 192, split_str[0]);
-			
-			if (StrEqual(command, "ready", false) || StrEqual(command, "rdy", false) || StrEqual(command, "r", false))
-			{
-				ReadyUp(client);
-				return Plugin_Handled;
-			}
-			else if (StrEqual(command, "unready", false) || StrEqual(command, "notready", false) || StrEqual(command, "unrdy", false) || StrEqual(command, "notrdy", false) || StrEqual(command, "ur", false) || StrEqual(command, "nr", false))
-			{
-				ReadyDown(client);
-				return Plugin_Handled;
-			}
-			else if (StrEqual(command, "scores", false) || StrEqual(command, "score", false) || StrEqual(command, "s", false))
-			{
-				ShowScore(client);
-				return Plugin_Handled;
-			}
-			else if (StrEqual(command, "info", false) || StrEqual(command, "i", false))
-			{
-				if (GetConVarBool(g_h_show_info))
-				{
-					ReadyInfoPriv(client);
-				}
-				else
-				{
-					PrintToChat(client, "\03<WarMod> \x04%t", "ShowInfo Disabled");
-				}
-				return Plugin_Handled;
-			}
-			else if (StrEqual(command, "help", false))
-			{
-				DisplayHelp(client);
-				return Plugin_Handled;
-			}
-		}
-		
-		if (!GetConVarBool(g_h_modifiers))
-		{
-			return Plugin_Continue;
-		}
-		
-		strcopy(message, 192, text[start_index]);
-		
-		new client_list[MAXPLAYERS + 1];
-		new client_num = 0;
-		
-		for (new i = 1; i <= MaxClients; i++)
-		{
-			if (IsPlayerAlive(client))
-			{
-				if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == client_team)
-				{
-					client_list[client_num] = i;
-					client_num++;
-				}
-			}
-			else
-			{
-				if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == client_team && !IsPlayerAlive(i))
-				{
-					client_list[client_num] = i;
-					client_num++;
-				}
-			}
-		}
-		
-		new Handle:h_message = StartMessage("SayText2", client_list, client_num);
-		BfWriteByte(h_message, client);
-		BfWriteByte(h_message, true);
-		if (IsPlayerAlive(client))
-		{
-			BfWriteString(h_message, "\x01(TEAM) \x03%s1 \x01:  %s2");
-		}
-		else
-		{
-			BfWriteString(h_message, "\x01*DEAD* (TEAM) \x03%s1 \x01:  %s2");
-		}
-		BfWriteString(h_message, client_name);
-		BfWriteString(h_message, message);
-		EndMessage();
-		
-		return Plugin_Handled;
+		// warmod is disabled
+		return;
 	}
 	
-	return Plugin_Continue;
+	new targets[MAXPLAYERS + 1];
+	new numTargets = 0;
+	new String:player_name[32];
+	new String:auth_id[32];
+	new String:userId[12];
+	
+	new bool:wildcard = StrEqual(query, "*");
+	
+	for (new i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || IsFakeClient(i))
+		{
+			continue;
+		}
+		
+		GetClientName(i, player_name, sizeof(player_name));
+		GetClientAuthString(i, auth_id, sizeof(auth_id));
+		Format(userId, sizeof(userId), "#%d", GetClientUserId(i));
+		
+		if (wildcard || StrContains(player_name, query, false) != -1 || StrContains(auth_id, query, false) != -1 || StrEqual(userId, query, false))
+		{
+			targets[numTargets] = i;
+			numTargets++;
+		}
+	}
+	
+	GetClientName(client, player_name, sizeof(player_name));
+	
+	GetClientAuthString(client, auth_id, sizeof(auth_id));
+	
+	new String:ip_address[32];
+	GetClientIP(client, ip_address, sizeof(ip_address));
+	
+	if (numTargets == 0)
+	{
+		PrintToChat(client, "%sNo players matched search query", CHAT_PREFIX);
+		return;
+	}
+	
+	new HTTPRequestHandle:request = Steam_CreateHTTPRequest(HTTPMethod_POST, QUERY_URL);
+	Steam_SetHTTPRequestGetOrPostParameter(request, "command", "whois");
+	Steam_SetHTTPRequestGetOrPostParameter(request, "name", player_name);
+	Steam_SetHTTPRequestGetOrPostParameter(request, "uniqueId", auth_id);
+	Steam_SetHTTPRequestGetOrPostParameter(request, "ipAddress", ip_address);
+	
+	new target;
+	new String:target_player_name[32];
+	new String:target_auth_id[32];
+	new String:target_ip_address[32];
+	new String:param_name[32];
+	
+	for (new i = 0; i < numTargets; i++)
+	{
+		target = targets[i];
+		GetClientName(target, target_player_name, sizeof(target_player_name));
+		GetClientAuthString(target, target_auth_id, sizeof(target_auth_id));
+		GetClientIP(target, target_ip_address, sizeof(target_ip_address));
+		
+		Format(param_name, sizeof(param_name), "targetNames[%d]", i);
+		Steam_SetHTTPRequestGetOrPostParameter(request, param_name, target_player_name);
+		Format(param_name, sizeof(param_name), "targetUniqueIds[%d]", i);
+		Steam_SetHTTPRequestGetOrPostParameter(request, param_name, target_auth_id);
+		Format(param_name, sizeof(param_name), "targetIpAddresses[%d]", i);
+		Steam_SetHTTPRequestGetOrPostParameter(request, param_name, target_ip_address);
+	}
+	Steam_SetHTTPRequestGetOrPostParameter(request, "query", query);
+	Steam_SendHTTPRequest(request, OnWhoIsComplete, GetClientUserId(client));
+	
+	if (numTargets == 1)
+	{
+		GetClientName(targets[0], player_name, sizeof(player_name));
+		GetClientAuthString(targets[0], auth_id, sizeof(auth_id));
+		WM_PrintToChat(client, "Searching for '%s' (%s)...", player_name, auth_id);
+	}
+	else
+	{
+		WM_PrintToChat(client, "Searching for %d matching players...", numTargets);
+	}
+}
+
+public OnWhoIsComplete(HTTPRequestHandle:request, bool:requestSuccessful, HTTPStatusCode:statusCode, any:userId)
+{
+	new client = GetClientOfUserId(userId);
+	
+	if (client == 0 || !requestSuccessful || statusCode != HTTPStatusCode_OK)
+	{
+		Steam_ReleaseHTTPRequest(request);
+		return;
+	}
+	
+	new size = Steam_GetHTTPResponseBodySize(request);
+	new String:data[size];
+	Steam_GetHTTPResponseBodyData(request, data, size);
+	
+	WM_PrintToChat(client, data);
+	
+	Steam_ReleaseHTTPRequest(request);
 }
 
 SwitchScores()
@@ -4164,17 +4623,32 @@ SwitchTeams()
 	SetConVarStringHidden(g_h_t, g_ct_name);
 	g_ct_name = temp;
 	SetConVarStringHidden(g_h_ct, temp);
+	
+	g_t_name_escaped = g_t_name;
+	EscapeString(g_t_name_escaped, sizeof(g_t_name_escaped));
+	g_ct_name_escaped = g_ct_name;
+	EscapeString(g_ct_name_escaped, sizeof(g_ct_name_escaped));
+}
+
+SetLastScore()
+{
+	g_last_scores[SCORE_T] = GetTTotalScore();
+	g_last_names[SCORE_T] = g_t_name;
+	g_last_scores[SCORE_CT] = GetCTTotalScore();
+	g_last_names[SCORE_CT] = g_ct_name;
 }
 
 public Action:SwapAll(client, args)
 {
 	if (!IsActive(client, false))
 	{
+		// warmod is disabled
 		return Plugin_Handled;
 	}
 	
 	if (!IsAdminCmd(client, false))
 	{
+		// not allowed, rcon only
 		return Plugin_Handled;
 	}
 	
@@ -4221,6 +4695,7 @@ public Action:StopRecord(Handle:timer)
 {
 	if (!g_match)
 	{
+		// only stop if another match hasn't started
 		ServerCommand("tv_stoprecord");
 	}
 }
@@ -4298,50 +4773,78 @@ public Action:KickLoserTeam(Handle:timer, any:team)
 	}
 }
 
-Log2Game(const String:Format[], any:...)
+stock LogSimpleEvent(String:event_name[], size)
 {
-	decl String:buffer[1024];
-	VFormat(buffer, sizeof(buffer), Format, 2);
+	new String:json[256];
+	EscapeString(event_name, size);
+	Format(json, sizeof(json), "{\"event\": \"%s\"}", event_name);
+	LogEvent("%s", json);
+}
+
+stock LogEvent(const String:format[], any:...)
+{
+	decl String:event[1024];
+	VFormat(event, sizeof(event), format, 2);
 	new stats_method = GetConVarInt(g_h_stats_method);
 	if (stats_method == 0 || stats_method == 2)
 	{
-		LogToGame("WarMod triggered %s", buffer);
+		// standard server log files + udp stream
+		LogToGame("<WarMod> %s", event);
 	}
+	
+	// inject timestamp into JSON object, hacky but quite simple
+	new String:timestamp[64];
+	FormatTime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S");
+	
+	// remove leading '{' from the event and add the timestamp in, including new '{'
+	Format(event, sizeof(event), "{\"timestamp\": \"%s\", %s", timestamp, event[1]);
+	
 	if ((stats_method == 1 || stats_method == 2) && g_log_file != INVALID_HANDLE)
 	{
-		LogToOpenFileEx(g_log_file, buffer);
+		WriteFileLine(g_log_file, event);
 	}
-	LiveWire_Send(buffer);
+	
+	LiveWire_Send(event);
 }
 
-LogPlayers()
+stock LogLiveWireEvent(const String:format[], any:...)
 {
-	new String:player_name[32];
-	new String:authid[32];
-	new String:team[32];
-	new String:authip[32];
+	decl String:event[1024];
+	VFormat(event, sizeof(event), format, 2);
+	
+	// inject timestamp into JSON object, hacky but quite simple
+	new String:timestamp[64];
+	FormatTime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S");
+	
+	// remove leading '{' from the event and add the timestamp in, including new '{'
+	Format(event, sizeof(event), "{\"timestamp\": \"%s\", %s", timestamp, event[1]);
+	
+	LiveWire_Send(event);
+}
+
+LogPlayers(bool:livewire_only=false)
+{
+	new String:ip_address[32];
+	new String:country[2];
+	new String:log_string[256];
 	for (new i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) > 1 && !IsFakeClient(i))
+		if (IsClientInGame(i))
 		{
-			GetClientName(i, player_name, sizeof(player_name));
-			GetClientAuthString(i, authid, sizeof(authid));
-			GetClientIP(i, authip, sizeof(authip));
+			GetClientIP(i, ip_address, sizeof(ip_address));
+			GeoipCode2(ip_address, country);
+			CS_GetLogString(i, log_string, sizeof(log_string));
 			
-			if (GetClientTeam(i) == TERRORIST_TEAM)
+			EscapeString(ip_address, sizeof(ip_address));
+			EscapeString(country, sizeof(country));
+			if (!livewire_only)
 			{
-				team = "TERRORIST";
+				LogEvent("{\"event\": \"player_status\", \"player\": %s, \"address\": \"%s\", \"country\": \"%s\"}", log_string, ip_address, country);
 			}
-			else if (GetClientTeam(i) == COUNTER_TERRORIST_TEAM)
+			else
 			{
-				team = "CT";
+				LogLiveWireEvent("{\"event\": \"player_status\", \"player\": %s, \"address\": \"%s\", \"country\": \"%s\"}", log_string, ip_address, country);
 			}
-			else if (GetClientTeam(i) == SPECTATOR_TEAM)
-			{
-				team = "Spectator";
-			}
-			
-			Log2Game("\"player_status\" \"%s<%s><%s><%s>\"", player_name, authid, authip, team);
 		}
 	}
 }
@@ -4353,10 +4856,10 @@ public Action:Stats_Trace(Handle:timer)
 		new String:log_string[256];
 		for (new i = 1; i <= MaxClients; i++)
 		{
-			if (IsClientInGame(i) && GetClientTeam(i) > 1 && !IsFakeClient(i) && IsPlayerAlive(i))
+			if (IsClientInGame(i) && GetClientTeam(i) > 1 && IsPlayerAlive(i))
 			{
 				CS_GetAdvLogString(i, log_string, sizeof(log_string));
-				Log2Game("\"player_trace\" (player \"%s\")", log_string);
+				LogEvent("{\"event\": \"player_trace\", \"player\": %s}", log_string);
 			}
 		}
 	}
@@ -4368,6 +4871,7 @@ RenameLogs()
 	GetConVarString(g_h_save_file_dir, save_dir, sizeof(save_dir));
 	if (g_log_file != INVALID_HANDLE)
 	{
+		FlushFile(g_log_file);
 		CloseHandle(g_log_file);
 		g_log_file = INVALID_HANDLE;
 		new String:old_log_filename[128];
@@ -4438,7 +4942,7 @@ LogPlayerStats(client)
 		{
 			if (weapon_stats[client][i][LOG_HIT_SHOTS] > 0 || weapon_stats[client][i][LOG_HIT_DEATHS] > 0)
 			{
-				Log2Game("\"weapon_stats\" (player \"%s\") (weapon \"%s\") (shots \"%d\") (hits \"%d\") (kills \"%d\") (headshots \"%d\") (tks \"%d\") (damage \"%d\") (deaths \"%d\") (head \"%d\") (chest \"%d\") (stomach \"%d\") (leftarm \"%d\") (rightarm \"%d\") (leftleg \"%d\") (rightleg \"%d\") (generic \"%d\")", log_string, weapon_list[i], weapon_stats[client][i][LOG_HIT_SHOTS], weapon_stats[client][i][LOG_HIT_HITS], weapon_stats[client][i][LOG_HIT_KILLS], weapon_stats[client][i][LOG_HIT_HEADSHOTS], weapon_stats[client][i][LOG_HIT_TEAMKILLS], weapon_stats[client][i][LOG_HIT_DAMAGE], weapon_stats[client][i][LOG_HIT_DEATHS], weapon_stats[client][i][LOG_HIT_HEAD], weapon_stats[client][i][LOG_HIT_CHEST], weapon_stats[client][i][LOG_HIT_STOMACH], weapon_stats[client][i][LOG_HIT_LEFTARM], weapon_stats[client][i][LOG_HIT_RIGHTARM], weapon_stats[client][i][LOG_HIT_LEFTLEG], weapon_stats[client][i][LOG_HIT_RIGHTLEG], weapon_stats[client][i][LOG_HIT_GENERIC]);
+				LogEvent("{\"event\": \"weapon_stats\", \"player\": %s, \"weapon\": \"%s\", \"shots\": %d, \"hits\": %d, \"kills\": %d, \"headshots\": %d, \"tks\": %d, \"damage\": %d, \"deaths\": %d, \"head\": %d, \"chest\": %d, \"stomach\": %d, \"leftArm\": %d, \"rightArm\": %d, \"leftLeg\": %d, \"rightLeg\": %d, \"generic\": %d}", log_string, weapon_list[i], weapon_stats[client][i][LOG_HIT_SHOTS], weapon_stats[client][i][LOG_HIT_HITS], weapon_stats[client][i][LOG_HIT_KILLS], weapon_stats[client][i][LOG_HIT_HEADSHOTS], weapon_stats[client][i][LOG_HIT_TEAMKILLS], weapon_stats[client][i][LOG_HIT_DAMAGE], weapon_stats[client][i][LOG_HIT_DEATHS], weapon_stats[client][i][LOG_HIT_HEAD], weapon_stats[client][i][LOG_HIT_CHEST], weapon_stats[client][i][LOG_HIT_STOMACH], weapon_stats[client][i][LOG_HIT_LEFTARM], weapon_stats[client][i][LOG_HIT_RIGHTARM], weapon_stats[client][i][LOG_HIT_LEFTLEG], weapon_stats[client][i][LOG_HIT_RIGHTLEG], weapon_stats[client][i][LOG_HIT_GENERIC]);
 			}
 		}
 		new round_stats[LOG_HIT_NUM];
@@ -4449,7 +4953,7 @@ LogPlayerStats(client)
 				round_stats[x] += weapon_stats[client][i][x];
 			}
 		}
-		Log2Game("\"round_stats\" (player \"%s\") (shots \"%d\") (hits \"%d\") (kills \"%d\") (headshots \"%d\") (tks \"%d\") (damage \"%d\") (deaths \"%d\") (head \"%d\") (chest \"%d\") (stomach \"%d\") (leftarm \"%d\") (rightarm \"%d\") (leftleg \"%d\") (rightleg \"%d\") (generic \"%d\")", log_string, round_stats[LOG_HIT_SHOTS], round_stats[LOG_HIT_HITS], round_stats[LOG_HIT_KILLS], round_stats[LOG_HIT_HEADSHOTS], round_stats[LOG_HIT_TEAMKILLS], round_stats[LOG_HIT_DAMAGE], round_stats[LOG_HIT_DEATHS], round_stats[LOG_HIT_HEAD], round_stats[LOG_HIT_CHEST], round_stats[LOG_HIT_STOMACH], round_stats[LOG_HIT_LEFTARM], round_stats[LOG_HIT_RIGHTARM], round_stats[LOG_HIT_LEFTLEG], round_stats[LOG_HIT_RIGHTLEG], round_stats[LOG_HIT_GENERIC]);
+		LogEvent("{\"event\": \"round_stats\", \"player\": %s, \"shots\": %d, \"hits\": %d, \"kills\": %d, \"headshots\": %d, \"tks\": %d, \"damage\": %d, \"deaths\": %d, \"head\": %d, \"chest\": %d, \"stomach\": %d, \"leftArm\": %d, \"rightArm\": %d, \"leftLeg\": %d, \"rightLeg\": %d, \"generic\": %d}", log_string, round_stats[LOG_HIT_SHOTS], round_stats[LOG_HIT_HITS], round_stats[LOG_HIT_KILLS], round_stats[LOG_HIT_HEADSHOTS], round_stats[LOG_HIT_TEAMKILLS], round_stats[LOG_HIT_DAMAGE], round_stats[LOG_HIT_DEATHS], round_stats[LOG_HIT_HEAD], round_stats[LOG_HIT_CHEST], round_stats[LOG_HIT_STOMACH], round_stats[LOG_HIT_LEFTARM], round_stats[LOG_HIT_RIGHTARM], round_stats[LOG_HIT_LEFTLEG], round_stats[LOG_HIT_RIGHTLEG], round_stats[LOG_HIT_GENERIC]);
 		ResetPlayerStats(client);
 	}
 }
@@ -4462,7 +4966,7 @@ LogClutchStats(client)
 		{
 			new String:log_string[256];
 			CS_GetLogString(client, log_string, sizeof(log_string));
-			Log2Game("\"player_clutch\" (player \"%s\") (versus \"%d\") (frags \"%d\") (bomb_planted \"%d\") (won \"%d\")", log_string, clutch_stats[client][CLUTCH_VERSUS], clutch_stats[client][CLUTCH_FRAGS], g_planted, clutch_stats[client][CLUTCH_WON]);
+			LogEvent("{\"event\": \"player_clutch\", \"player\": %s, \"versus\": %d, \"frags\": %d, \"bombPlanted\": %d, \"won\": %d}", log_string, clutch_stats[client][CLUTCH_VERSUS], clutch_stats[client][CLUTCH_FRAGS], g_planted, clutch_stats[client][CLUTCH_WON]);
 			clutch_stats[client][CLUTCH_LAST] = 0;
 			clutch_stats[client][CLUTCH_VERSUS] = 0;
 			clutch_stats[client][CLUTCH_FRAGS] = 0;
@@ -4486,35 +4990,79 @@ GetWeaponIndex(const String:weapon[])
 Handle:MySQL_Connect()
 {
 	new String:error[256];
-	new Handle:db = INVALID_HANDLE;
+	new Handle:dbc = INVALID_HANDLE;
 	
 	if (SQL_CheckConfig("warmod"))
 	{
-		db = SQL_Connect("warmod", true, error, sizeof(error));
+		dbc = SQL_Connect("warmod", true, error, sizeof(error));
+		if (dbc == INVALID_HANDLE)
+		{
+			LogError(error);
+		}
+	}
+	else
+	{
+		LogError("No WarMod database configuration found (note: case-sensitive)!");
 	}
 	
-	return db;
+	return dbc;
+}
+
+public Action:CreateTable(client, args)
+{
+	new Handle:dbc = MySQL_Connect();
+	if (dbc == INVALID_HANDLE)
+	{
+		return;
+	}
+	
+	new String:table_name[128];
+	GetConVarString(g_h_table_name, table_name, sizeof(table_name));
+	new success = MySQL_CreateTable(dbc, table_name);
+	if (success)
+	{
+		ReplyToCommand(client, "WarMod results table creation successfull!");
+	}
+	
+	CloseHandle(dbc);
+}
+
+MySQL_CreateTable(Handle:dbc, String:table_name[])
+{
+	new String:query_str[1024];
+	Format(query_str, sizeof(query_str), "CREATE TABLE IF NOT EXISTS `%s` (`match_id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT, `match_start` DATETIME NOT NULL, `match_end` DATETIME NOT NULL, `map` VARCHAR(64) NOT NULL, `max_rounds` TINYINT(3) unsigned NOT NULL, `overtime_max_rounds` TINYINT(3) UNSIGNED NOT NULL, `overtime_count` TINYINT(3) UNSIGNED NOT NULL, `played_out` TINYINT(1) NOT NULL, `t_name` VARCHAR(128) NOT NULL, `t_overall_score` TINYINT(3) UNSIGNED NOT NULL, `t_first_half_score` TINYINT(3) UNSIGNED NOT NULL, `t_second_half_score` TINYINT(3) UNSIGNED NOT NULL, `t_overtime_score` TINYINT(3) UNSIGNED NOT NULL, `ct_name` VARCHAR(128) NOT NULL, `ct_overall_score` TINYINT(3) UNSIGNED NOT NULL, `ct_first_half_score` TINYINT(3) UNSIGNED NOT NULL, `ct_second_half_score` TINYINT(3) UNSIGNED NOT NULL, `ct_overtime_score` TINYINT(3) UNSIGNED NOT NULL, PRIMARY KEY (`match_id`));", table_name);
+	new success = SQL_FastQuery(dbc, query_str);
+	if (!success)
+	{
+		new String:error[256];
+		SQL_GetError(dbc, error, sizeof(error));
+		
+		LogError(error);
+		return false;
+	}
+	return true;
 }
 
 MySQL_UploadResults(match_length, String:map[], max_rounds, overtime_max_rounds, overtime_count, bool:played_out, String:t_name[], t_overall_score, t_first_half_score, t_second_half_score, t_overtime_score, String:ct_name[], ct_overall_score, ct_first_half_score, ct_second_half_score, ct_overtime_score)
 {
-	if (wm_db == INVALID_HANDLE)
+	new Handle:dbc = MySQL_Connect();
+	if (dbc == INVALID_HANDLE)
 	{
+		LogError("Invalid database connection - cannot upload match results");
 		return;
 	}
 	
 	new String:error[256];
 	new String:query_str[1024];
-	new String:tbl_name[128];
+	new String:table_name[128];
 	
-	GetConVarString(g_h_table_name, tbl_name, sizeof(tbl_name));
-	SQL_EscapeString(wm_db, tbl_name, tbl_name, sizeof(tbl_name));
+	GetConVarString(g_h_table_name, table_name, sizeof(table_name));
+	SQL_EscapeString(dbc, table_name, table_name, sizeof(table_name));
 	
-	Format(query_str, sizeof(query_str), "CREATE TABLE IF NOT EXISTS `%s` ( `match_id` int(11) unsigned NOT NULL auto_increment, `match_start` datetime NOT NULL, `match_end` datetime NOT NULL, `map` varchar(64) NOT NULL, `max_rounds` tinyint(3) unsigned NOT NULL, `overtime_max_rounds` tinyint(3) unsigned NOT NULL, `overtime_count` tinyint(3) unsigned NOT NULL, `played_out` tinyint(1) NOT NULL, `t_name` varchar(128) NOT NULL, `t_overall_score` tinyint(3) unsigned NOT NULL, `t_first_half_score` tinyint(3) unsigned NOT NULL, `t_second_half_score` tinyint(3) unsigned NOT NULL, `t_overtime_score` tinyint(3) unsigned NOT NULL, `ct_name` varchar(128) NOT NULL, `ct_overall_score` tinyint(3) unsigned NOT NULL, `ct_first_half_score` tinyint(3) unsigned NOT NULL, `ct_second_half_score` tinyint(3) unsigned NOT NULL, `ct_overtime_score` tinyint(3) unsigned NOT NULL, PRIMARY KEY (`match_id`));", tbl_name);
-	SQL_FastQuery(wm_db, query_str);
+	MySQL_CreateTable(dbc, table_name);
 	
-	Format(query_str, sizeof(query_str), "INSERT INTO `%s` (`match_id`, `match_start`, `match_end`, `map`, `max_rounds`, `overtime_max_rounds`, `overtime_count`, `played_out`, `t_name`, `t_overall_score`, `t_first_half_score`, `t_second_half_score`, `t_overtime_score`, `ct_name`, `ct_overall_score`, `ct_first_half_score`, `ct_second_half_score`, `ct_overtime_score`) VALUES (NULL, DATE_SUB(NOW(), INTERVAL ? SECOND), NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tbl_name);
-	new Handle:db_query = SQL_PrepareQuery(wm_db, query_str,	error, sizeof(error));
+	Format(query_str, sizeof(query_str), "INSERT INTO `%s` (`match_id`, `match_start`, `match_end`, `map`, `max_rounds`, `overtime_max_rounds`, `overtime_count`, `played_out`, `t_name`, `t_overall_score`, `t_first_half_score`, `t_second_half_score`, `t_overtime_score`, `ct_name`, `ct_overall_score`, `ct_first_half_score`, `ct_second_half_score`, `ct_overtime_score`) VALUES (NULL, DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? SECOND), UTC_TIMESTAMP(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", table_name);
+	new Handle:db_query = SQL_PrepareQuery(dbc, query_str, error, sizeof(error));
 	
 	if (db_query == INVALID_HANDLE)
 	{
@@ -4550,6 +5098,8 @@ MySQL_UploadResults(match_length, String:map[], max_rounds, overtime_max_rounds,
 	SQL_Execute(db_query);
 	
 	CloseHandle(db_query);
+	
+	CloseHandle(dbc);
 }
 
 public Action:MessageHandler(UserMsg:msg_id, Handle:bf, const players[], playersNum, bool:reliable, bool:init)
@@ -4780,7 +5330,7 @@ public Action:CheckNames(Handle:timer, any:client)
 			{
 				if (IsClientInGame(i) && !IsFakeClient(i))
 				{
-					PrintToChat(i, "\x03<WarMod> \x04%t", "Names Required");
+					PrintToChat(i, "%s%t", CHAT_PREFIX, "Names Required");
 				}
 			}
 		}
@@ -4813,6 +5363,14 @@ public Action:LiveWire_Check(Handle:timer)
 	if (!g_live && !g_lw_connected && GetConVarBool(g_h_lw_enabled))
 	{
 		LiveWire_Connect();
+	}
+}
+
+public Action:LiveWire_Ping(Handle:timer)
+{
+	if (g_lw_connected)
+	{
+		LogLiveWireEvent("{\"event\": \"ping\"}");
 	}
 }
 
