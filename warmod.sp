@@ -2010,7 +2010,7 @@ public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 				CS_GetAdvLogString(attacker, attacker_log_string, sizeof(attacker_log_string));
 				CS_GetAdvLogString(victim, victim_log_string, sizeof(victim_log_string));
 				EscapeString(weapon, sizeof(weapon));
-				LogEvent("{\"event\": \"round_start\", \"attacker\": %s, \"victim\": %s, \"weapon\": \"%s\", \"damage\": %d, \"damageArmor\": %d, \"hitGroup\": %d}", attacker_log_string, victim_log_string, weapon, damage, damage_armor, hitgroup);
+				LogEvent("{\"event\": \"player_hurt\", \"attacker\": %s, \"victim\": %s, \"weapon\": \"%s\", \"damage\": %d, \"damageArmor\": %d, \"hitGroup\": %d}", attacker_log_string, victim_log_string, weapon, damage, damage_armor, hitgroup);
 			}
 			if (weapon_index > -1)
 			{
