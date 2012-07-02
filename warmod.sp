@@ -13,7 +13,7 @@
 
 /* player info */
 new g_player_list[MAXPLAYERS + 1];
-new bool:g_premium_list[MAXPLAYERS + 1];
+new bool:g_premium_list[MAXPLAYERS + 1] = false;
 new String:g_premium_prefix[MAXPLAYERS + 1][MAX_PARAM_SIZE];
 new bool:g_cancel_list[MAXPLAYERS + 1];
 new String:user_damage[MAXPLAYERS + 1][DMG_MSG_SIZE];
@@ -4352,11 +4352,6 @@ stock SayText2(client, const String:message[], bool:teamOnly=false, bool:silence
 		EndMessage();
 	}
 	
-	new String:log_string[192];
-	CS_GetLogString(client, log_string, sizeof(log_string));
-	
-	LogEvent("{\"event\": \"player_say\", \"player\": %s, \"message\": \"%s\", \"teamOnly\": %d}", log_string, message, teamOnly);
-	
 	new String:standard_log_string[192];
 	CS_GetStandardLogString(client, standard_log_string, sizeof(standard_log_string));
 	
@@ -4368,6 +4363,12 @@ stock SayText2(client, const String:message[], bool:teamOnly=false, bool:silence
 	{
 		LogToGame("\"%s\" say \"%s\"", standard_log_string, message);
 	}
+	
+	new String:log_string[192];
+	CS_GetLogString(client, log_string, sizeof(log_string));
+	
+	EscapeString(message);
+	LogEvent("{\"event\": \"player_say\", \"player\": %s, \"message\": \"%s\", \"teamOnly\": %d}", log_string, message, teamOnly);
 }
 
 public Action:SayChat(client, args)

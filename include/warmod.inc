@@ -49,7 +49,7 @@
 #define CLUTCH_WON         3
 #define CLUTCH_NUM         4
 
-#define WM_VERSION         "3.1.1"
+#define WM_VERSION         "3.1.2"
 #define WM_DESCRIPTION     "An automative service created by Twelve-60 of GameTech (www.gametech.com.au) for CS:S competition matches"
 
 new String:g_team_name_cache[16][64];
