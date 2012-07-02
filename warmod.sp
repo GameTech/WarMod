@@ -4295,7 +4295,7 @@ public Action:ChangeCT(client, args)
  * @noreturn
  *********************************************************/
 
-stock SayText2(client, const String:message[], bool:teamOnly=false, bool:silence=false)
+stock SayText2(client, String:message[], size, bool:teamOnly=false, bool:silence=false)
 {
 	if (!silence)
 	{
@@ -4367,7 +4367,7 @@ stock SayText2(client, const String:message[], bool:teamOnly=false, bool:silence
 	new String:log_string[192];
 	CS_GetLogString(client, log_string, sizeof(log_string));
 	
-	EscapeString(message);
+	EscapeString(message, size);
 	LogEvent("{\"event\": \"player_say\", \"player\": %s, \"message\": \"%s\", \"teamOnly\": %d}", log_string, message, teamOnly);
 }
 
@@ -4480,7 +4480,7 @@ public Action:SayChat(client, args)
 		return Plugin_Continue;
 	}
 	
-	SayText2(client, message, teamOnly, silence);
+	SayText2(client, message, sizeof(message), teamOnly, silence);
 	
 	return Plugin_Handled;
 }
