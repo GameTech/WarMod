@@ -618,7 +618,7 @@ public OnClientPostAdminCheck(client)
 	if (!IsFakeClient(client))
 	{
 		// check player for gametech premium status
-		new String:player_name[32];
+		new String:player_name[64];
 		GetClientName(client, player_name, sizeof(player_name));
 		
 		new String:auth_id[32];
@@ -1776,7 +1776,7 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 	
 	SortCustom1D(the_money, num_players, SortMoney);
 	
-	new String:player_name[32];
+	new String:player_name[64];
 	new String:player_money[10];
 	new String:has_weapon[1];
 	new pri_weapon;
@@ -1829,7 +1829,7 @@ stock ShowTeamMoney(client)
 	
 	SortCustom1D(the_money, num_players, SortMoney);
 	
-	new String:player_name[32];
+	new String:player_name[64];
 	new String:player_money[10];
 	new String:has_weapon[1];
 	new pri_weapon;
@@ -2181,7 +2181,7 @@ public Event_Player_Name(Handle:event, const String:name[], bool:dontBroadcast)
 	{
 		new String:log_string[256];
 		CS_GetLogString(client, log_string, sizeof(log_string));
-		new String:newName[32];
+		new String:newName[64];
 		GetEventString(event, "newname", newName, sizeof(newName));
 		EscapeString(newName, sizeof(newName));
 		LogEvent("{\"event\": \"player_name\", \"player\": %s, \"newName\": \"%s\"}", log_string, newName);
@@ -3652,7 +3652,7 @@ public Action:ReadyList(client, args)
 		return Plugin_Handled;
 	}
 	
-	new String:player_name[32];
+	new String:player_name[64];
 	new player_count;
 	
 	ReplyToCommand(client, "<WarMod> %T:", "Ready System", LANG_SERVER);
@@ -3852,7 +3852,7 @@ ShowInfo(client, bool:enable, bool:priv, time)
 	}
 	
 	new String:players_unready[192];
-	new String:player_name[32];
+	new String:player_name[64];
 	new String:player_temp[192];
 	
 	for (new i = 1; i <= MaxClients; i++)
@@ -4203,7 +4203,7 @@ public Action:ChangeT(client, args)
 		return Plugin_Handled;
 	}
 	
-	new String:name[32];
+	new String:name[64];
 	
 	if (GetCmdArgs() > 0)
 	{
@@ -4253,7 +4253,7 @@ public Action:ChangeCT(client, args)
 		return Plugin_Handled;
 	}
 	
-	new String:name[32];
+	new String:name[64];
 	
 	if (GetCmdArgs() > 0)
 	{
@@ -4299,7 +4299,7 @@ stock SayText2(client, String:message[], size, bool:teamOnly=false, bool:silence
 {
 	if (!silence)
 	{
-		new String:client_name[32];
+		new String:client_name[64];
 		GetClientName(client, client_name, sizeof(client_name));
 		new client_team = GetClientTeam(client);
 		new client_list[MAXPLAYERS + 1];
@@ -4379,7 +4379,7 @@ public Action:SayChat(client, args)
 		return Plugin_Continue;
 	}
 	
-	new String:type[32];
+	new String:type[64];
 	GetCmdArg(0, type, sizeof(type));
 	
 	new bool:teamOnly = false;
@@ -4421,8 +4421,8 @@ public Action:SayChat(client, args)
 	else if (message[0] == '!' || message[0] == '.' || message[0] == '/')
 	{
 		new String:command[192];
-		new String:message_parts[2][32];
-		ExplodeString(message[1], " ", message_parts, 2, 32);
+		new String:message_parts[2][64];
+		ExplodeString(message[1], " ", message_parts, 2, 64);
 		strcopy(command, 192, message_parts[0]);
 		
 		new validCommand = true;
@@ -4495,11 +4495,13 @@ WhoIs(client, String:query[])
 	
 	new targets[MAXPLAYERS + 1];
 	new numTargets = 0;
-	new String:player_name[32];
+	new String:player_name[64];
 	new String:auth_id[32];
 	new String:userId[12];
 	
-	new bool:wildcard = StrEqual(query, "*");
+	new bool:wildcard = StrEqual(query, "*") || StrEqual(query, "@all");
+	new bool:t_only = StrEqual(query, "@t");
+	new bool:ct_only = StrEqual(query, "@ct");
 	
 	for (new i = 1; i <= MaxClients; i++)
 	{
@@ -4512,7 +4514,7 @@ WhoIs(client, String:query[])
 		GetClientAuthString(i, auth_id, sizeof(auth_id));
 		Format(userId, sizeof(userId), "#%d", GetClientUserId(i));
 		
-		if (wildcard || StrContains(player_name, query, false) != -1 || StrContains(auth_id, query, false) != -1 || StrEqual(userId, query, false))
+		if (wildcard || (t_only && GetClientTeam(i) == TERRORIST_TEAM) || (ct_only && GetClientTeam(i) == COUNTER_TERRORIST_TEAM) || StrContains(player_name, query, false) != -1 || StrContains(auth_id, query, false) != -1 || StrEqual(userId, query, false))
 		{
 			targets[numTargets] = i;
 			numTargets++;
@@ -4539,10 +4541,10 @@ WhoIs(client, String:query[])
 	Steam_SetHTTPRequestGetOrPostParameter(request, "ipAddress", ip_address);
 	
 	new target;
-	new String:target_player_name[32];
+	new String:target_player_name[64];
 	new String:target_auth_id[32];
 	new String:target_ip_address[32];
-	new String:param_name[32];
+	new String:param_name[64];
 	
 	for (new i = 0; i < numTargets; i++)
 	{
