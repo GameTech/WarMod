@@ -640,7 +640,7 @@ public OnClientPostAdminCheck(client)
 	
 	if (GetConVarBool(g_h_stats_enabled) && client != 0)
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetLogString(client, log_string, sizeof(log_string));
 		
 		new String:country[2];
@@ -1973,7 +1973,7 @@ public Event_Player_Blind(Handle:event, const String:name[], bool:dontBroadcast)
 		new client = GetClientOfUserId(GetEventInt(event, "userid"));
 		if (client > 0)
 		{
-			new String:log_string[256];
+			new String:log_string[384];
 			CS_GetAdvLogString(client, log_string, sizeof(log_string));
 			LogEvent("{\"event\": \"player_blind\", \"player\": %s, \"duration\": %.2f}", log_string, GetEntPropFloat(client, Prop_Send, "m_flFlashDuration"));
 		}
@@ -2005,8 +2005,8 @@ public Event_Player_Hurt(Handle:event, const String:name[], bool:dontBroadcast)
 			{
 				GetClientWeapon(victim, last_weapon[victim], 64);
 				ReplaceString(last_weapon[victim], 64, "weapon_", "");
-				new String:attacker_log_string[256];
-				new String:victim_log_string[256];
+				new String:attacker_log_string[384];
+				new String:victim_log_string[384];
 				CS_GetAdvLogString(attacker, attacker_log_string, sizeof(attacker_log_string));
 				CS_GetAdvLogString(victim, victim_log_string, sizeof(victim_log_string));
 				EscapeString(weapon, sizeof(weapon));
@@ -2044,8 +2044,8 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 		if (attacker > 0 && victim > 0 && attacker != victim)
 		{
 			// normal frag
-			new String:attacker_log_string[256];
-			new String:victim_log_string[256];
+			new String:attacker_log_string[384];
+			new String:victim_log_string[384];
 			CS_GetAdvLogString(attacker, attacker_log_string, sizeof(attacker_log_string));
 			CS_GetAdvLogString(victim, victim_log_string, sizeof(victim_log_string));
 			EscapeString(weapon, sizeof(weapon));
@@ -2054,7 +2054,7 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 		else if (victim > 0 && victim == attacker || StrEqual(weapon, "worldspawn"))
 		{
 			// suicide
-			new String:log_string[256];
+			new String:log_string[384];
 			CS_GetAdvLogString(victim, log_string, sizeof(log_string));
 			ReplaceString(weapon, sizeof(weapon), "worldspawn", "world");
 			EscapeString(weapon, sizeof(weapon));
@@ -2179,7 +2179,7 @@ public Event_Player_Name(Handle:event, const String:name[], bool:dontBroadcast)
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetLogString(client, log_string, sizeof(log_string));
 		new String:newName[64];
 		GetEventString(event, "newname", newName, sizeof(newName));
@@ -2205,7 +2205,7 @@ public Event_Player_Disc_Pre(Handle:event, const String:name[], bool:dontBroadca
 	// stats
 	if (GetConVarBool(g_h_stats_enabled) && client != 0)
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetLogString(client, log_string, sizeof(log_string));
 		new String:reason[128];
 		GetEventString(event, "reason", reason, sizeof(reason));
@@ -2261,7 +2261,7 @@ public Event_Player_Team(Handle:event, const String:name[], bool:dontBroadcast)
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetLogString(client, log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"player_team\", \"player\": %s, \"oldTeam\": %d, \"newTeam\": %d}", log_string, old_team, new_team);
 	}
@@ -2340,7 +2340,7 @@ public Event_Bomb_PickUp(Handle:event, const String:name[], bool:dontBroadcast)
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_pickup\", \"player\": %s}", log_string);
 	}
@@ -2356,7 +2356,7 @@ public Event_Bomb_Dropped(Handle:event, const String:name[], bool:dontBroadcast)
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_dropped\", \"player\": %s}", log_string);
 	}
@@ -2372,7 +2372,7 @@ public Event_Bomb_Plant_Begin(Handle:event, const String:name[], bool:dontBroadc
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_plant_begin\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
@@ -2388,7 +2388,7 @@ public Event_Bomb_Plant_Abort(Handle:event, const String:name[], bool:dontBroadc
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_plant_abort\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
@@ -2406,7 +2406,7 @@ public Event_Bomb_Planted(Handle:event, const String:name[], bool:dontBroadcast)
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_planted\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
@@ -2424,7 +2424,7 @@ public Event_Bomb_Defuse_Begin(Handle:event, const String:name[], bool:dontBroad
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(client, log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_defuse_begin\", \"player\": %s, \"kit\": %d}", log_string, GetEventInt(event, "site"), GetEventBool(event, "haskit"));
 	}
@@ -2440,7 +2440,7 @@ public Event_Bomb_Defuse_Abort(Handle:event, const String:name[], bool:dontBroad
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_defuse_abort\", \"player\": %s}", log_string);
 	}
@@ -2458,7 +2458,7 @@ public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(client, log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_defused\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
@@ -2504,7 +2504,7 @@ public Event_Detonate_Flash(Handle:event, const String:name[], bool:dontBroadcas
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"grenade_detonate\", \"player\": %s, \"grenade\": \"flashbang\"}", log_string);
 	}
@@ -2520,7 +2520,7 @@ public Event_Detonate_Smoke(Handle:event, const String:name[], bool:dontBroadcas
 	// stats	
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"grenade_detonate\", \"player\": %s, \"grenade\": \"smokegrenade\"}", log_string);
 	}
@@ -2536,7 +2536,7 @@ public Event_Detonate_HeGrenade(Handle:event, const String:name[], bool:dontBroa
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"grenade_detonate\", \"player\": %s, \"grenade\": \"hegrenade\"}", log_string);
 	}
@@ -2552,7 +2552,7 @@ public Event_Item_Pickup(Handle:event, const String:name[], bool:dontBroadcast)
 	// stats
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetAdvLogString(GetClientOfUserId(GetEventInt(event, "userid")), log_string, sizeof(log_string));
 		new String:item[64];
 		GetEventString(event, "item", item, sizeof(item));
@@ -3191,7 +3191,7 @@ public SortMoney(elem1, elem2, const array[], Handle:hndl)
 
 ReadyServ(client, bool:ready, bool:silent, bool:show, bool:priv)
 {
-	new String:log_string[256];
+	new String:log_string[384];
 	CS_GetLogString(client, log_string, sizeof(log_string));
 	if (ready)
 	{
@@ -4342,7 +4342,7 @@ stock SayText2(client, String:message[], size, bool:teamOnly=false, bool:silence
 		new Handle:h_message = StartMessage("SayText2", client_list, client_num);
 		BfWriteByte(h_message, client);
 		BfWriteByte(h_message, true);
-		new String:format[256];
+		new String:format[384];
 		
 		Format(format, sizeof(format), "\x01%s\x01%s%s\x03%%s1 \x01:  %%s2", g_premium_prefix[client], status_prefix, team_prefix);
 		BfWriteString(h_message, format);
@@ -4778,7 +4778,7 @@ public Action:KickLoserTeam(Handle:timer, any:team)
 
 stock LogSimpleEvent(String:event_name[], size)
 {
-	new String:json[256];
+	new String:json[384];
 	EscapeString(event_name, size);
 	Format(json, sizeof(json), "{\"event\": \"%s\"}", event_name);
 	LogEvent("%s", json);
@@ -4829,7 +4829,7 @@ LogPlayers(bool:livewire_only=false)
 {
 	new String:ip_address[32];
 	new String:country[2];
-	new String:log_string[256];
+	new String:log_string[384];
 	for (new i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i))
@@ -4856,7 +4856,7 @@ public Action:Stats_Trace(Handle:timer)
 {
 	if (GetConVarBool(g_h_stats_enabled))
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		for (new i = 1; i <= MaxClients; i++)
 		{
 			if (IsClientInGame(i) && GetClientTeam(i) > 1 && IsPlayerAlive(i))
@@ -4939,7 +4939,7 @@ LogPlayerStats(client)
 {
 	if (IsClientInGame(client) && GetClientTeam(client) > 1)
 	{
-		new String:log_string[256];
+		new String:log_string[384];
 		CS_GetLogString(client, log_string, sizeof(log_string));
 		for (new i = 0; i < NUM_WEAPONS; i++)
 		{
@@ -4967,7 +4967,7 @@ LogClutchStats(client)
 	{
 		if (clutch_stats[client][CLUTCH_LAST] == 1)
 		{
-			new String:log_string[256];
+			new String:log_string[384];
 			CS_GetLogString(client, log_string, sizeof(log_string));
 			LogEvent("{\"event\": \"player_clutch\", \"player\": %s, \"versus\": %d, \"frags\": %d, \"bombPlanted\": %d, \"won\": %d}", log_string, clutch_stats[client][CLUTCH_VERSUS], clutch_stats[client][CLUTCH_FRAGS], g_planted, clutch_stats[client][CLUTCH_WON]);
 			clutch_stats[client][CLUTCH_LAST] = 0;
