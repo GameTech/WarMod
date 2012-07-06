@@ -589,6 +589,10 @@ public OnAdminMenuReady(Handle:topmenu)
 
 public OnClientConnected(client)
 {
+	if (!GetConVarBool(g_h_lw_enabled)) {
+		return;
+	}
+	
 	new count = 0;
 	for (new i = 1; i <= MaxClients; i++)
 	{
