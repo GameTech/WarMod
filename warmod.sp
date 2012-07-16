@@ -7,6 +7,7 @@
 #include <socket>
 #include <steamtools>
 #include <warmod>
+#include <basecomm>
 #undef REQUIRE_PLUGIN
 #include <adminmenu>
 #include <autoupdate>
@@ -4380,6 +4381,12 @@ public Action:SayChat(client, args)
 	if (!IsActive(0, true) || args < 1)
 	{
 		// warmod is disabled or no arguments
+		return Plugin_Continue;
+	}
+	
+	if (BaseComm_IsClientGagged(client) && client > 0)
+	{
+		// client is gagged
 		return Plugin_Continue;
 	}
 	
