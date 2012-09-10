@@ -489,7 +489,7 @@ public OnSocketConnected(Handle:socket, any:arg)
 	
 	EscapeString(username, sizeof(username));
 	EscapeString(password, sizeof(password));
-	LogLiveWireEvent("{\"event\": \"server_status\", \"game\": \"css\", \"version\": \"%s\", \"ip\": \"%s\", \"port\": %d, \"username\": \"%s\", \"password\": \"%s\"}", WM_VERSION, ipAddress, GetConVarInt(FindConVar("hostport")), username, password);
+	LogLiveWireEvent("{\"event\": \"server_status\", \"game\": \"css\", \"version\": \"%s\", \"ip\": \"%s\", \"port\": %d, \"username\": \"%s\", \"password\": \"%s\", \"unixTime\": %d}", WM_VERSION, ipAddress, GetConVarInt(FindConVar("hostport")), username, password, GetTime());
 	
 	LogPlayers(true);
 }
@@ -3350,8 +3350,7 @@ LiveOn3(bool:e_war)
 				g_log_warmod_dir = false;
 			}
 			
-			new String:event_name[] = "log_start";
-			LogSimpleEvent(event_name, sizeof(event_name));
+			LogEvent("{\"event\": \"log_start\", \"unixTime\": %d}", GetTime());
 		}
 		
 		LogPlayers();
@@ -4384,7 +4383,7 @@ public Action:SayChat(client, args)
 		return Plugin_Continue;
 	}
 	
-	if (BaseComm_IsClientGagged(client) && client > 0)
+	if (client > 0 && BaseComm_IsClientGagged(client))
 	{
 		// client is gagged
 		return Plugin_Continue;
