@@ -12,22 +12,24 @@
 #include <adminmenu>
 #include <autoupdate>
 
+/* player info */
 new g_player_list[MAXPLAYERS + 1];
 new bool:g_premium_list[MAXPLAYERS + 1] = false;
 new String:g_premium_prefix[MAXPLAYERS + 1][MAX_PARAM_SIZE];
 new bool:g_cancel_list[MAXPLAYERS + 1];
+//new String:user_damage[MAXPLAYERS + 1][DMG_MSG_SIZE];
+
 new g_scores[2][2];
 new g_scores_overtime[2][256][2];
 new g_overtime_count = 0;
 
-new g_last_scores[2] =
-{
-	-1, 0
-};
+new g_last_scores[2] = -1;
 new g_last_maxrounds;
 new String:g_last_names[2][64] = {DEFAULT_T_NAME, DEFAULT_CT_NAME};
 
+//new g_i_ragdolls = -1;
 new g_i_account = -1;
+//new g_i_frags = -1;
 
 /* miscellaneous */
 new String:g_map[64];
@@ -157,20 +159,20 @@ public OnPluginStart()
 {
 	LoadTranslations("warmod.phrases");
 	LoadTranslations("common.phrases");
-	
+
 	new Handle:topmenu;
 	if (LibraryExists("adminmenu") && ((topmenu = GetAdminTopMenu()) != INVALID_HANDLE))
 	{
 		OnAdminMenuReady(topmenu);
 	}
-	
+
 	g_f_on_lo3 = CreateGlobalForward("OnLiveOn3", ET_Ignore);
 	g_f_on_half_time = CreateGlobalForward("OnHalfTime", ET_Ignore);
 	g_f_on_reset_half = CreateGlobalForward("OnResetHalf", ET_Ignore);
 	g_f_on_reset_match = CreateGlobalForward("OnResetMatch", ET_Ignore);
 	g_f_on_end_match = CreateGlobalForward("OnEndMatch", ET_Ignore);
-	
-RegConsoleCmd("score", ConsoleScore);
+
+	RegConsoleCmd("score", ConsoleScore);
 	RegConsoleCmd("wm_version", WMVersion);
 	RegConsoleCmd("say", SayChat);
 	RegConsoleCmd("say_team", SayChat);
@@ -179,57 +181,62 @@ RegConsoleCmd("score", ConsoleScore);
 	RegConsoleCmd("spectate", ChooseTeam);
 	RegConsoleCmd("wm_readylist", ReadyList);
 	RegConsoleCmd("wmrl", ReadyList);
-	
+
 	RegConsoleCmd("wm_cash", AskTeamMoney);
-	
+
 	RegAdminCmd("last_score", LastMatch, ADMFLAG_CUSTOM1, "Displays the score of the last match to the console");
 	RegAdminCmd("last", LastMatch, ADMFLAG_CUSTOM1, "Displays the score of the last match to the console");
-	
+
+	RegAdminCmd("notlive", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
+	RegAdminCmd("nl", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
+	RegAdminCmd("cancelhalf", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
+	RegAdminCmd("ch", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
+
 	RegAdminCmd("cancelmatch", CancelMatch, ADMFLAG_CUSTOM1, "Declares match not live and restarts round");
 	RegAdminCmd("cm", CancelMatch, ADMFLAG_CUSTOM1, "Declares match not live and restarts round");
-	
+
 	RegAdminCmd("readyup", ReadyToggle, ADMFLAG_CUSTOM1, "Starts or stops the ReadyUp System");
 	RegAdminCmd("ru", ReadyToggle, ADMFLAG_CUSTOM1, "Starts or stops the ReadyUp System");
-	
+
 	RegAdminCmd("t", ChangeT, ADMFLAG_CUSTOM1, "Team starting terrorists - Designed for score purposes");
 	RegAdminCmd("ct", ChangeCT, ADMFLAG_CUSTOM1, "Team starting counter-terrorists - Designed for score purposes");
-	
+
 	RegAdminCmd("swap", SwapAll, ADMFLAG_CUSTOM1, "Swap all players to the opposite team");
-	
+
 	RegAdminCmd("pwd", ChangePassword, ADMFLAG_PASSWORD, "Set or display the sv_password console variable");
 	RegAdminCmd("pw", ChangePassword, ADMFLAG_PASSWORD, "Set or display the sv_password console variable");
-	
+
 	RegAdminCmd("active", ActiveToggle, ADMFLAG_CUSTOM1, "Toggle the wm_active console variable");
-	
+
 	RegAdminCmd("minready", ChangeMinReady, ADMFLAG_CUSTOM1, "Set or display the wm_min_ready console variable");
-	
+
 	RegAdminCmd("maxrounds", ChangeMaxRounds, ADMFLAG_CUSTOM1, "Set or display the wm_max_rounds console variable");
-	
+
 	RegAdminCmd("knife", KnifeOn3, ADMFLAG_CUSTOM1, "Remove all weapons except knife and lo3");
 	RegAdminCmd("ko3", KnifeOn3, ADMFLAG_CUSTOM1, "Remove all weapons except knife and lo3");
-	
+
 	RegAdminCmd("cancelknife", CancelKnife, ADMFLAG_CUSTOM1, "Declares knife not live and restarts round");
 	RegAdminCmd("ck", CancelKnife, ADMFLAG_CUSTOM1, "Declares knife not live and restarts round");
-	
+
 	RegAdminCmd("forceallready", ForceAllReady, ADMFLAG_CUSTOM1, "Forces all players to become ready");
 	RegAdminCmd("far", ForceAllReady, ADMFLAG_CUSTOM1, "Forces all players to become ready");
 	RegAdminCmd("forceallunready", ForceAllUnready, ADMFLAG_CUSTOM1, "Forces all players to become unready");
 	RegAdminCmd("faur", ForceAllUnready, ADMFLAG_CUSTOM1, "Forces all players to become unready");
-	
+
 	RegAdminCmd("lo3", ForceStart, ADMFLAG_CUSTOM1, "Starts the match regardless of player and ready count");
 	RegAdminCmd("forcestart", ForceStart, ADMFLAG_CUSTOM1, "Starts the match regardless of player and ready count");
 	RegAdminCmd("fs", ForceStart, ADMFLAG_CUSTOM1, "Starts the match regardless of player and ready count");
 	RegAdminCmd("forceend", ForceEnd, ADMFLAG_CUSTOM1, "Ends the match regardless of status");
 	RegAdminCmd("fe", ForceEnd, ADMFLAG_CUSTOM1, "Ends the match regardless of status");
-	
+
 	RegAdminCmd("readyon", ReadyOn, ADMFLAG_CUSTOM1, "Turns on or restarts the ReadyUp System");
 	RegAdminCmd("ron", ReadyOn, ADMFLAG_CUSTOM1, "Turns on or restarts the ReadyUp System");
 	RegAdminCmd("readyoff", ReadyOff, ADMFLAG_CUSTOM1, "Turns off the ReadyUp System if enabled");
 	RegAdminCmd("roff", ReadyOff, ADMFLAG_CUSTOM1, "Turns off the ReadyUp System if enabled");
-	
+
 	RegAdminCmd("wm_debug_create_table", CreateTable, ADMFLAG_ROOT, "Testing purposes only, connects to the WarMod database and creates a match results table (if it does not already exist)");
 	RegAdminCmd("lw_reconnect", LiveWire_ReConnect, ADMFLAG_ROOT, "Reconnects LiveWire if lw_enabled is 1");
-	
+
 	g_h_active = CreateConVar("wm_active", "1", "Enable or disable WarMod as active", FCVAR_NOTIFY);
 	g_h_lw_enabled = CreateConVar("lw_enabled", "1", "Enable or disable LiveWire", FCVAR_NOTIFY);
 	g_h_lw_address = CreateConVar("lw_address", "stream.livewire.gametech.com.au", "Sets the ip/host that LiveWire will use to connect", FCVAR_NOTIFY);
@@ -237,7 +244,7 @@ RegConsoleCmd("score", ConsoleScore);
 	g_h_lw_bindaddress = CreateConVar("lw_bindaddress", "", "Optional setting to specify which ip LiveWire will bind to (for servers with multiple ips) - blank = automatic/primary", FCVAR_NOTIFY);
 	g_h_lw_group_name = CreateConVar("lw_group_name", "", "Sets the group name that LiveWire will use", FCVAR_PROTECTED|FCVAR_DONTRECORD);
 	g_h_lw_group_password = CreateConVar("lw_group_password", "", "Sets the group password that LiveWire will use", FCVAR_PROTECTED|FCVAR_DONTRECORD);
-	
+
 	g_h_stats_enabled = CreateConVar("wm_stats_enabled", "1", "Enable or disable statistical logging", FCVAR_NOTIFY);
 	g_h_stats_method = CreateConVar("wm_stats_method", "2", "Sets the stats logging method: 0 = UDP stream/server logs, 1 = WarMod logs, 2 = both", FCVAR_NOTIFY, true, 0.0);
 	g_h_stats_trace_enabled = CreateConVar("wm_stats_trace", "0", "Enable or disable updating all player positions, every wm_stats_trace_delay seconds", FCVAR_NOTIFY);
@@ -249,9 +256,14 @@ RegConsoleCmd("score", ConsoleScore);
 	g_h_min_ready = CreateConVar("wm_min_ready", "10", "Sets the minimum required ready players to Live on 3", FCVAR_NOTIFY);
 	g_h_max_players = CreateConVar("wm_max_players", "10", "Sets the maximum players allowed on both teams combined, others will be forced to spectator (0 = unlimited)", FCVAR_NOTIFY, true, 0.0);
 	g_h_match_config = CreateConVar("wm_match_config", "warmod/ruleset_mr15.cfg", "Sets the match config to load on Live on 3");
+	g_h_live_config = CreateConVar("wm_live_config", "warmod/on_match_lo3.cfg", "Sets the Live on 3 config");
+	g_h_knife_config = CreateConVar("wm_knife_config", "warmod/on_match_ko3.cfg", "Sets the Knife on 3 config");
 	g_h_end_config = CreateConVar("wm_reset_config", "warmod/on_match_end.cfg", "Sets the config to load at the end/reset of a match");
 	g_h_half_time_config = CreateConVar("wm_half_time_config", "warmod/on_match_half_time.cfg", "Sets the config to load at half time of a match (including overtime)");
 	g_h_round_money = CreateConVar("wm_round_money", "1", "Enable or disable a client's team mates money to be displayed at the start of a round (to him only)", FCVAR_NOTIFY);
+	g_h_night_vision = CreateConVar("wm_block_nightvision", "1", "Enable or disable blocking nightvision", FCVAR_NOTIFY);
+	g_h_bomb_frags = CreateConVar("wm_bomb_frags", "0", "Enable or disable a player getting 3 points for their bomb explosion", FCVAR_NOTIFY);
+	g_h_defuse_frags = CreateConVar("wm_defuse_frags", "0", "Enable or disable a player getting 3 points for defusing the bomb", FCVAR_NOTIFY);
 	g_h_ingame_scores = CreateConVar("wm_ingame_scores", "1", "Enable or disable ingame scores to be showed at the end of each round", FCVAR_NOTIFY);
 	g_h_max_rounds = CreateConVar("wm_max_rounds", "15", "Sets maxrounds before auto team switch", FCVAR_NOTIFY);
 	g_h_warm_up_grens = CreateConVar("wm_block_warm_up_grenades", "0", "Enable or disable grenade blocking in warmup", FCVAR_NOTIFY);
@@ -260,7 +272,12 @@ RegConsoleCmd("score", ConsoleScore);
 	g_h_knife_smokegrenade = CreateConVar("wm_knife_smokegrenade", "0", "Enable or disable giving a player a smokegrenade on Knife on 3", FCVAR_NOTIFY);
 	g_h_req_names = CreateConVar("wm_require_names", "0", "Enable or disable the requirement of set team names for lo3", FCVAR_NOTIFY);
 	g_h_show_info = CreateConVar("wm_show_info", "1", "Enable or disable the display of the Ready System to players", FCVAR_NOTIFY);
+	g_h_live_override = CreateConVar("wm_live_override", "1", "Enable or disable the override of the execution of wm_live_config and instead uses it's own (wait command fix)", FCVAR_NOTIFY);
+	g_h_live_override_knife = CreateConVar("wm_live_override_knife", "1", "Enable or disable the override of the execution of wm_knife_config and instead uses it's own (wait command fix)", FCVAR_NOTIFY);
 	g_h_auto_ready = CreateConVar("wm_auto_ready", "1", "Enable or disable the ready system being automatically enabled on map change", FCVAR_NOTIFY);
+	g_h_auto_swap = CreateConVar("wm_auto_swap", "1", "Enable or disable the automatic swapping of teams at half time", FCVAR_NOTIFY);
+	g_h_auto_swap_delay = CreateConVar("wm_auto_swap_delay", "3", "Time to wait before swapping teams at half time", 0, true, 0.0);
+	g_h_half_auto_ready = CreateConVar("wm_half_auto_ready", "1", "Enable or disable the ready system being automatically enabled at end of half", FCVAR_NOTIFY);
 	g_h_auto_knife = CreateConVar("wm_auto_knife", "0", "Enable or disable the knife round before going live", FCVAR_NOTIFY);
 	g_h_auto_kick_team = CreateConVar("wm_auto_kick_team", "0", "Enable or disable the automatic kicking of the losing team", FCVAR_NOTIFY);
 	g_h_auto_kick_delay = CreateConVar("wm_auto_kick_delay", "10", "Sets the seconds to wait before kicking the losing team", FCVAR_NOTIFY, true, 0.0);
@@ -272,6 +289,13 @@ RegConsoleCmd("score", ConsoleScore);
 	g_h_save_file_dir = CreateConVar("wm_save_dir", "warmod", "Directory to store SourceTV demos and WarMod logs");
 	g_h_prefix_logs = CreateConVar("wm_prefix_logs", "1", "Enable or disable the prefixing of \"_\" to uncompleted match SourceTV demos and WarMod logs", FCVAR_NOTIFY);
 	g_h_play_out = CreateConVar("wm_play_out", "0", "Enable or disable teams required to play out the match even after a winner has been decided", FCVAR_NOTIFY);
+	g_h_damage = CreateConVar("wm_damage", "1", "Sets player console damage mode: 0 = removed, 1 = on death, 2 = delayed until end of the round", FCVAR_NOTIFY);
+	g_h_remove_hint_text = CreateConVar("wm_remove_help_hints", "1", "Enable or disable the removal of the help hints", FCVAR_NOTIFY);
+	g_h_remove_gren_sound = CreateConVar("wm_remove_grenade_sound", "0", "Enable or disable the \"Fire in the Hole\" sound when throwing grenades", FCVAR_NOTIFY);
+	g_h_body_remove = CreateConVar("wm_remove_ragdoll", "1", "Enable or disable the removal of ragdolls after wm_remove_ragdoll_delay seconds of time after death", FCVAR_NOTIFY);
+	g_h_body_delay = CreateConVar("wm_remove_ragdoll_delay", "2", "The ammount of time to wait before removing corpses", FCVAR_NOTIFY, true, 0.0);
+	g_h_deathcam_remove = CreateConVar("wm_remove_deathcam", "1", "Enable or disable the switching of views after wm_remove_deathcam_delay seconds of time after death", FCVAR_NOTIFY);
+	g_h_deathcam_delay = CreateConVar("wm_remove_deathcam_delay", "1.4", "The ammount of time to wait before switching a players view after death", FCVAR_NOTIFY, true, 1.4);
 	g_h_warmup_respawn = CreateConVar("wm_warmup_respawn", "0", "Enable or disable the respawning of players in warmup", FCVAR_NOTIFY);
 	g_h_status = CreateConVar("wm_status", "0", "WarMod automatically updates this value to the corresponding match status code", FCVAR_NOTIFY);
 	g_h_upload_results = CreateConVar("wm_upload_results", "0", "Enable or disable the uploading of match results via MySQL", FCVAR_NOTIFY);
@@ -281,10 +305,11 @@ RegConsoleCmd("score", ConsoleScore);
 	g_h_t_score = CreateConVar("wm_t_score", "0", "WarMod automatically updates this value to the Terrorist's total score", FCVAR_NOTIFY);
 	g_h_ct_score = CreateConVar("wm_ct_score", "0", "WarMod automatically updates this value to the Counter-Terrorist's total score", FCVAR_NOTIFY);
 	g_h_notify_version = CreateConVar("wm_notify_version", WM_VERSION, WM_DESCRIPTION, FCVAR_NOTIFY|FCVAR_REPLICATED);
-	
+
 	g_h_mp_startmoney = FindConVar("mp_startmoney");
-	
+
 	g_i_account = FindSendPropOffs("CCSPlayer", "m_iAccount");
+	g_i_ragdolls = FindSendPropOffs("CCSPlayer","m_hRagdoll");
 
 	HookConVarChange(g_h_active, OnActiveChange);
 	HookConVarChange(g_h_req_names, OnReqNameChange);
@@ -297,12 +322,16 @@ RegConsoleCmd("score", ConsoleScore);
 	HookConVarChange(g_h_lw_enabled, OnLiveWireChange);
 	HookConVarChange(g_h_t, OnTChange);
 	HookConVarChange(g_h_ct, OnCTChange);
-	
+
+	HookUserMessage(GetUserMessageId("HintText"), MessageHandler, true);
+	HookUserMessage(GetUserMessageId("SendAudio"), MessageHandler, true);
+	HookUserMessage(GetUserMessageId("TextMsg"), MessageHandler, true);
+
 	HookEvent("round_start", Event_Round_Start);
 	HookEvent("round_end", Event_Round_End);
 	HookConVarChange(FindConVar("mp_restartgame"), Event_Round_Restart);
 	HookEvent("round_freeze_end", Event_Round_Freeze_End);
-	
+
 	HookEvent("player_blind", Event_Player_Blind);
 	HookEvent("player_hurt",  Event_Player_Hurt);
 	HookEvent("player_death",  Event_Player_Death);
@@ -310,29 +339,28 @@ RegConsoleCmd("score", ConsoleScore);
 	HookEvent("player_disconnect", Event_Player_Disc_Pre, EventHookMode_Pre);
 	HookEvent("player_team", Event_Player_Team);
 	HookEvent("player_team", Event_Player_Team_Pre, EventHookMode_Pre);
-	
+
 	HookEvent("bomb_pickup", Event_Bomb_PickUp);
 	HookEvent("bomb_dropped", Event_Bomb_Dropped);
 	HookEvent("bomb_beginplant", Event_Bomb_Plant_Begin);
 	HookEvent("bomb_abortplant", Event_Bomb_Plant_Abort);
 	HookEvent("bomb_planted", Event_Bomb_Planted);
+	HookEvent("bomb_exploded", Event_Bomb_Exploded);
 	HookEvent("bomb_begindefuse", Event_Bomb_Defuse_Begin);
 	HookEvent("bomb_abortdefuse", Event_Bomb_Defuse_Abort);
 	HookEvent("bomb_defused", Event_Bomb_Defused);
-	
+
 	HookEvent("weapon_fire", Event_Weapon_Fire);
-	
+
 	HookEvent("flashbang_detonate", Event_Detonate_Flash);
 	HookEvent("smokegrenade_detonate", Event_Detonate_Smoke);
 	HookEvent("hegrenade_detonate", Event_Detonate_HeGrenade);
-	HookEvent("molotov_detonate", Event_Detonate_Molotov);
-	HookEvent("decoy_detonate", Event_Detonate_Decoy);
-	
+
 	HookEvent("item_pickup", Event_Item_Pickup);
-	
+
 	CreateTimer(15.0, HelpText, 0, TIMER_REPEAT);
 	CreateTimer(15.0, CheckNames, 0, TIMER_REPEAT);
-	
+
 	CreateTimer(600.0, LiveWire_Check, 0, TIMER_REPEAT);
 	CreateTimer(1800.0, LiveWire_Ping, _, TIMER_REPEAT);
 }
