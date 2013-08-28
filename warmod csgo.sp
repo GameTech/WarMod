@@ -68,7 +68,7 @@ new Handle:g_h_stv_chat = INVALID_HANDLE;
 new Handle:g_h_locked = INVALID_HANDLE;
 new Handle:g_h_min_ready = INVALID_HANDLE;
 new Handle:g_h_max_players = INVALID_HANDLE;
-new Handle:g_h_live_config = INVALID_HANDLE;
+//new Handle:g_h_live_config = INVALID_HANDLE;
 //new Handle:g_h_knife_config = INVALID_HANDLE;
 new Handle:g_h_match_config = INVALID_HANDLE;
 new Handle:g_h_end_config = INVALID_HANDLE;
@@ -121,7 +121,7 @@ new bool:g_t_money = false;
 new bool:g_t_score = false;
 new bool:g_t_knife = true;
 new bool:g_t_had_knife = false;
-//new bool:g_second_half_first = false;
+new bool:g_second_half_first = false;
 //new bool:g_round_end = false;
 
 /* livewire */
@@ -251,7 +251,7 @@ public OnPluginStart()
 	g_h_min_ready = CreateConVar("wm_min_ready", "10", "Sets the minimum required ready players to Live on 3", FCVAR_NOTIFY);
 	g_h_max_players = CreateConVar("wm_max_players", "10", "Sets the maximum players allowed on both teams combined, others will be forced to spectator (0 = unlimited)", FCVAR_NOTIFY, true, 0.0);
 	g_h_match_config = CreateConVar("wm_match_config", "warmod/ruleset_mr15.cfg", "Sets the match config to load on Live on 3");
-	g_h_live_config = CreateConVar("wm_live_config", "warmod/on_match_lo3.cfg", "Sets the Live on 3 config");
+	//g_h_live_config = CreateConVar("wm_live_config", "warmod/on_match_lo3.cfg", "Sets the Live on 3 config");
 	//g_h_knife_config = CreateConVar("wm_knife_config", "warmod/on_match_ko3.cfg", "Sets the Knife on 3 config");
 	g_h_end_config = CreateConVar("wm_reset_config", "warmod/on_match_end.cfg", "Sets the config to load at the end/reset of a match");
 	g_h_half_time_config = CreateConVar("wm_half_time_config", "warmod/on_match_half_time.cfg", "Sets the config to load at half time of a match (including overtime)");
@@ -269,7 +269,7 @@ public OnPluginStart()
 	g_h_auto_kick_team = CreateConVar("wm_auto_kick_team", "0", "Enable or disable the automatic kicking of the losing team", FCVAR_NOTIFY);
 	g_h_auto_kick_delay = CreateConVar("wm_auto_kick_delay", "10", "Sets the seconds to wait before kicking the losing team", FCVAR_NOTIFY, true, 0.0);
 	g_h_score_mode = CreateConVar("wm_score_mode", "1", "Sets score mode: 1 = Best Of, 2 = First To (based on wm_max_rounds)", FCVAR_NOTIFY);
-	g_h_overtime = CreateConVar("wm_overtime", "1", "Sets overtime mode: 0 = off, 1 = Maxrounds (based on wm_overtime_max_rounds), 2 = Sudden Death", FCVAR_NOTIFY);
+	g_h_overtime = CreateConVar("wm_overtime", "0", "NOTE: UNSUPPORTED - Sets overtime mode: 0 = off, 1 = Maxrounds (based on wm_overtime_max_rounds), 2 = Sudden Death", FCVAR_NOTIFY);
 	g_h_overtime_mr = CreateConVar("wm_overtime_max_rounds", "3", "Sets overtime maxrounds", FCVAR_NOTIFY, true, 0.0);
 	g_h_overtime_money = CreateConVar("wm_overtime_start_money", "10000", "Sets overtime startmoney", FCVAR_NOTIFY, true, 0.0);
 	g_h_auto_record = CreateConVar("wm_auto_record", "1", "Enable or disable auto SourceTV demo record on Live on 3", FCVAR_NOTIFY);
@@ -499,15 +499,6 @@ public OnMapStart()
 	ResetMatch(true);
 }
 
-/*public OnLibraryRemoved(String:name[])
-{
-	if (StrEqual(name, "adminmenu", true))
-	{
-		g_h_menu = INVALID_HANDLE;
-	}
-	return 0;
-}*/
-
 public OnLibraryRemoved(const String:name[])
 {
 	if (StrEqual(name, "adminmenu"))
@@ -573,7 +564,7 @@ public OnClientPostAdminCheck(client)
 	
 	new String:ip_address[32];
 	GetClientIP(client, ip_address, sizeof(ip_address));
-	
+	IsFakeClient(client);
 	if (!IsActive(0, true))
 	{
 		// warmod is disabled
@@ -585,7 +576,7 @@ public OnClientPostAdminCheck(client)
 		new String:log_string[384];
 		CS_GetLogString(client, log_string, sizeof(log_string));
 		
-		new String:country[2];
+		new String:country[4];
 		GeoipCode2(ip_address, country);
 		
 		EscapeString(ip_address, sizeof(ip_address));
@@ -605,9 +596,7 @@ public OnClientDisconnect(client)
 	// reset client state
 	g_player_list[client] = PLAYER_DISC;
 	g_premium_list[client] = false;
-	g_premium_prefix[client] = "";
 	g_cancel_list[client] = false;
-	//user_damage[client][0] = '\0';
 	
 	// log player stats
 	LogPlayerStats(client);
@@ -657,6 +646,7 @@ ResetMatch(bool:silent)
 	g_match = false;
 	g_live = false;
 	g_first_half = true;
+	g_second_half_first = false;
 	g_t_money = false;
 	g_t_score = false;
 	g_t_knife = false;
@@ -1551,10 +1541,6 @@ ReadyInfoPriv(client)
 
 public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	//g_round_end = false;
-	
-	//ResetSwitchCameraTimers();
-	
 	if (!IsActive(0, true))
 	{
 		return;
@@ -1564,8 +1550,12 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 	{
 		LogEvent("{\"event\": \"round_start\", \"freezeTime\": %d}", GetConVarInt(FindConVar("mp_freezetime")));
 	}
-	
-	//CreateTimer(0.1, ShowDamage, false);
+
+	if (g_second_half_first)
+	{
+		LiveOn3OverrideFinish(3.5 + 3.5);
+		g_second_half_first = false;
+	}
 	
 	g_planted = false;
 	
@@ -1626,8 +1616,8 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 	SortCustom1D(the_money, num_players, SortMoney);
 	
 	new String:player_name[64];
-	new String:player_money[10];
-	new String:has_weapon[1];
+	new String:player_money[12];
+	new String:has_weapon[4];
 	new pri_weapon;
 	
 	// display team players money
@@ -1679,8 +1669,8 @@ stock ShowTeamMoney(client)
 	SortCustom1D(the_money, num_players, SortMoney);
 	
 	new String:player_name[64];
-	new String:player_money[10];
-	new String:has_weapon[1];
+	new String:player_money[12];
+	new String:has_weapon[4];
 	new pri_weapon;
 	
 	PrintToChat(client, "\x01--------");
@@ -2237,12 +2227,6 @@ public Event_Bomb_Defused(Handle:event, const String:name[], bool:dontBroadcast)
 		CS_GetAdvLogString(client, log_string, sizeof(log_string));
 		LogEvent("{\"event\": \"bomb_defused\", \"player\": %s, \"site\": %d}", log_string, GetEventInt(event, "site"));
 	}
-	
-/*	if (!GetConVarBool(g_h_defuse_frags))
-	{
-		// remove defuse frags
-		SetFrags(client, GetFrags(client) - 3);
-	}*/
 }
 
 public Event_Weapon_Fire(Handle:event, const String:name[], bool:dontBroadcast)
@@ -2472,7 +2456,7 @@ CheckScores()
 				
 				if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 				{
-					SwitchTeams();
+					SwitchTeamNames();
 				}
 				
 				/*if (GetConVarBool(g_h_auto_ready) || GetConVarBool(g_h_half_auto_ready))
@@ -2557,7 +2541,7 @@ CheckScores()
 					
 					if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 					{
-						SwitchTeams();
+						SwitchTeamNames();
 					}
 					SwitchScores();
 					SetLastScore();
@@ -2593,7 +2577,7 @@ CheckScores()
 				
 				if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 				{
-					SwitchTeams();
+					SwitchTeamNames();
 				}
 				SwitchScores();
 				SetLastScore();
@@ -2632,7 +2616,7 @@ CheckScores()
 					
 					if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 					{
-						SwitchTeams();
+						SwitchTeamNames();
 					}
 					SwitchScores();
 					SetLastScore();
@@ -2694,7 +2678,7 @@ CheckScores()
 				
 				if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 				{
-					SwitchTeams();
+					SwitchTeamNames();
 				}
 				
 				/*if (GetConVarBool(g_h_auto_ready) || GetConVarBool(g_h_half_auto_ready))
@@ -2752,7 +2736,7 @@ CheckScores()
 					
 					if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 					{
-						SwitchTeams();
+						SwitchTeamNames();
 					}
 					SwitchScores();
 					SetLastScore();
@@ -2795,7 +2779,7 @@ CheckScores()
 				
 				if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 				{
-					SwitchTeams();
+					SwitchTeamNames();
 				}
 				SwitchScores();
 				SetLastScore();
@@ -2849,7 +2833,7 @@ CheckScores()
 			
 			if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 			{
-				SwitchTeams();
+				SwitchTeamNames();
 			}
 			
 			/*if (GetConVarBool(g_h_auto_ready) || GetConVarBool(g_h_half_auto_ready))
@@ -2885,7 +2869,7 @@ CheckScores()
 			
 			if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 			{
-				SwitchTeams();
+				SwitchTeamNames();
 			}
 			SwitchScores();
 			SetLastScore();
@@ -3075,9 +3059,6 @@ LiveOn3(bool:e_war)
 	new String:match_config[64];
 	GetConVarString(g_h_match_config, match_config, sizeof(match_config));
 	
-	new String:live_config[64];
-	GetConVarString(g_h_live_config, live_config, sizeof(live_config));
-	
 	if (e_war && !StrEqual(match_config, ""))
 	{
 		ServerCommand("exec %s", match_config);
@@ -3163,6 +3144,7 @@ LiveOn3(bool:e_war)
 	g_live = true;
 	SetConVarIntHidden(g_h_t_score, GetTTotalScore());
 	SetConVarIntHidden(g_h_ct_score, GetCTTotalScore());
+
 }
 
 stock LiveOn3Override()
@@ -3417,12 +3399,6 @@ public Action:RestrictBuy(client, args)
 
 	new String:arg[128];
 	GetCmdArgString(arg, 128);
-	/*if (StrEqual(arg, "nvgs", false) && GetConVarBool(g_h_night_vision))
-	{
-		PrintToChat(client, "%s%t", CHAT_PREFIX, "Nightvision Blocked");
-		return Plugin_Handled;
-	}*/
-
 	if (!g_live && GetConVarBool(g_h_warm_up_grens))
 	{
 		new String:the_weapon[32];
@@ -3430,7 +3406,7 @@ public Action:RestrictBuy(client, args)
 		ReplaceString(the_weapon, sizeof(the_weapon), "weapon_", "");
 		ReplaceString(the_weapon, sizeof(the_weapon), "item_", "");
 
-		if (StrContains(the_weapon, "hegren", false) != -1 || StrContains(the_weapon, "flash", false) != -1 || StrContains(the_weapon, "smokegrenade", false) != -1)
+		if (StrContains(the_weapon, "hegren", false) != -1 || StrContains(the_weapon, "flash", false) != -1 || StrContains(the_weapon, "smokegrenade", false) != -1 || StrContains(the_weapon, "molotov", false) != -1 || StrContains(the_weapon, "incgrenade", false) != -1 || StrContains(the_weapon, "decoy", false) != -1)
 		{
 			PrintToChat(client, "%s%t", CHAT_PREFIX, "Grenades Blocked");
 			return Plugin_Handled;
@@ -4117,7 +4093,7 @@ stock SayText2(client, String:message[], size, bool:teamOnly=false, bool:silence
 			}
 		}
 		
-		new String:status_prefix[10] = "";
+		new String:status_prefix[12] = "";
 		if (!IsPlayerAlive(client))
 		{
 			if (client_team == SPECTATOR_TEAM)
@@ -4130,7 +4106,7 @@ stock SayText2(client, String:message[], size, bool:teamOnly=false, bool:silence
 			}
 		}
 		
-		new String:team_prefix[10] = "";
+		new String:team_prefix[12] = "";
 		if (teamOnly)
 		{
 			strcopy(team_prefix, sizeof(team_prefix), "\x01(TEAM) ");
@@ -4312,7 +4288,7 @@ SwitchScores()
 	}
 }
 
-SwitchTeams()
+SwitchTeamNames()
 {
 	new String:temp[64];
 	temp = g_t_name;
@@ -4354,7 +4330,7 @@ public Action:SwapAll(client, args)
 	
 	if (!StrEqual(g_t_name, DEFAULT_T_NAME, false) && !StrEqual(g_ct_name, DEFAULT_CT_NAME, false))
 	{
-		SwitchTeams();
+		SwitchTeamNames();
 	}
 	
 	LogAction(client, -1, "\"team_swap\" (player \"%L\")", client);
