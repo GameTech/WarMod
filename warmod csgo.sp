@@ -5,7 +5,6 @@
 #include <geoip>
 #include <cstrike>
 #include <socket>
-#include <steamtools>
 #include <warmod>
 #include <basecomm>
 #undef REQUIRE_PLUGIN
