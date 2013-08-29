@@ -3050,16 +3050,19 @@ CheckReady()
 		ShowInfo(0, false, false, 1);
 		SetAllCancelled(false);
 		ReadySystem(false);
+		ServerCommand("mp_warmup_end");
 		LiveOn3(true);
 	}
 }
 
 LiveOn3(bool:e_war)
 {
+	ServerCommand("mp_warmup_end");
 	Call_StartForward(g_f_on_lo3);
 	Call_Finish();
 	
 	g_t_score = false;
+
 	
 	new String:match_config[64];
 	GetConVarString(g_h_match_config, match_config, sizeof(match_config));
