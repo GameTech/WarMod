@@ -2472,6 +2472,7 @@ CheckScores()
 				new String:half_time_config[128];
 				GetConVarString(g_h_half_time_config, half_time_config, sizeof(half_time_config));
 				ServerCommand("exec %s", half_time_config);
+				CreateTimer(10.0, HalfTime);
 			}
 			else if (GetTScore() == GetConVarInt(g_h_max_rounds) && GetCTScore() == GetConVarInt(g_h_max_rounds)) // complete draw
 			{
@@ -4372,9 +4373,17 @@ public Action:StopRecord(Handle:timer)
 {
 	if (!g_match)
 	{
-		// only stop if another match hasn't started
-		ServerCommand("tv_stoprecord");
+		// starts warmup for second half
+		ServerCommand("mp_warmuptime 5000");
 	}
+}
+
+public Action:HalfTime(Handle:timer)
+{
+	// only stop if another match hasn't started
+	ServerCommand("tv_stoprecord");
+	ReadySystem(true);
+	ShowInfo(0, true, false, 0);
 }
 
 public Action:KickLoserTeam(Handle:timer, any:team)
