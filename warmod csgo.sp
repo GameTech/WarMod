@@ -4373,15 +4373,15 @@ public Action:StopRecord(Handle:timer)
 {
 	if (!g_match)
 	{
-		// starts warmup for second half
-		ServerCommand("mp_warmuptime 5000");
+		// only stop if another match hasn't started
+		ServerCommand("tv_stoprecord");
 	}
 }
 
 public Action:HalfTime(Handle:timer)
 {
-	// only stop if another match hasn't started
-	ServerCommand("tv_stoprecord");
+	// starts warmup for second half
+	ServerCommand("mp_warmuptime 5000");
 	ReadySystem(true);
 	ShowInfo(0, true, false, 0);
 }
