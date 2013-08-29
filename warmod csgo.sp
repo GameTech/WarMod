@@ -287,7 +287,7 @@ public OnPluginStart()
 	g_h_mp_startmoney = FindConVar("mp_startmoney");
 	
 	g_i_account = FindSendPropOffs("CCSPlayer", "m_iAccount");
-	if (g_iAccount == -1)
+	if (g_i_account == -1)
 	{
 		SetFailState("- Failed to find offset for m_iAccount!");
 	}
