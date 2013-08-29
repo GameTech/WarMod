@@ -36,7 +36,7 @@ new Float:g_match_start;
 new bool:g_log_warmod_dir = false;
 new String:g_log_filename[128];
 new Handle:g_log_file = INVALID_HANDLE;
-new String:weapon_list[][] = {"ak47","m4a1","awp","deagle","mp5navy","aug","p90","famas","galil","scout","g3sg1","hegrenade","usp", "glock","m249","m3","elite","fiveseven","mac10","p228","sg550","sg552","tmp","ump45","xm1014","knife","smokegrenade","flashbang"};
+new String:weapon_list[][] = {"ak47","m4a1","awp","deagle","mp7","aug","p90","famas","galilar","ssg08","g3sg1","hegrenade","hkp2000","glock","m249","nova","elite","fiveseven","mac10","p250","sg556","scar20","mp9","ump45","bizon","mag7","negev","sawedoff","tec9","taser","xm1014","knife","smokegrenade","decoy","flashbang","molotov","incgrenade"};
 new weapon_stats[MAXPLAYERS + 1][NUM_WEAPONS][LOG_HIT_NUM];
 new clutch_stats[MAXPLAYERS + 1][CLUTCH_NUM];
 new String:last_weapon[MAXPLAYERS + 1][64];
@@ -251,8 +251,6 @@ public OnPluginStart()
 	g_h_min_ready = CreateConVar("wm_min_ready", "10", "Sets the minimum required ready players to Live on 3", FCVAR_NOTIFY);
 	g_h_max_players = CreateConVar("wm_max_players", "10", "Sets the maximum players allowed on both teams combined, others will be forced to spectator (0 = unlimited)", FCVAR_NOTIFY, true, 0.0);
 	g_h_match_config = CreateConVar("wm_match_config", "warmod/ruleset_mr15.cfg", "Sets the match config to load on Live on 3");
-	//g_h_live_config = CreateConVar("wm_live_config", "warmod/on_match_lo3.cfg", "Sets the Live on 3 config");
-	//g_h_knife_config = CreateConVar("wm_knife_config", "warmod/on_match_ko3.cfg", "Sets the Knife on 3 config");
 	g_h_end_config = CreateConVar("wm_reset_config", "warmod/on_match_end.cfg", "Sets the config to load at the end/reset of a match");
 	g_h_half_time_config = CreateConVar("wm_half_time_config", "warmod/on_match_half_time.cfg", "Sets the config to load at half time of a match (including overtime)");
 	g_h_round_money = CreateConVar("wm_round_money", "1", "Enable or disable a client's team mates money to be displayed at the start of a round (to him only)", FCVAR_NOTIFY);
@@ -289,7 +287,11 @@ public OnPluginStart()
 	g_h_mp_startmoney = FindConVar("mp_startmoney");
 	
 	g_i_account = FindSendPropOffs("CCSPlayer", "m_iAccount");
-
+	if (g_iAccount == -1)
+	{
+		SetFailState("[CS:S] Give Cash - Failed to find offset for m_iAccount!");
+	}
+	
 	HookConVarChange(g_h_active, OnActiveChange);
 	HookConVarChange(g_h_req_names, OnReqNameChange);
 	HookConVarChange(g_h_min_ready, OnMinReadyChange);
@@ -473,6 +475,8 @@ public OnMapStart()
 {
 	// store current map
 	GetCurrentMap(g_map, sizeof(g_map));
+	ReplaceString(g_map, sizeof(g_map), "workshop/", "", false);
+	ReplaceString(g_map, sizeof(g_map), "/", "-", false);
 	StringToLower(g_map, sizeof(g_map));
 	// reset plugin version cvar
 	SetConVarStringHidden(g_h_notify_version, WM_VERSION);
