@@ -287,10 +287,10 @@ public OnPluginStart()
 	g_h_mp_startmoney = FindConVar("mp_startmoney");
 	
 	g_i_account = FindSendPropOffs("CCSPlayer", "m_iAccount");
-	if (g_i_account == -1)
-	{
-		SetFailState("- Failed to find offset for m_iAccount!");
-	}
+	//if (g_i_account == -1)
+	//{
+	//	SetFailState("- Failed to find offset for m_iAccount!");
+	//}
 	
 	HookConVarChange(g_h_active, OnActiveChange);
 	HookConVarChange(g_h_req_names, OnReqNameChange);
@@ -475,7 +475,7 @@ public OnMapStart()
 {
 	// store current map
 	GetCurrentMap(g_map, sizeof(g_map));
-	ReplaceString(g_map, sizeof(g_map), "workshop/", "", false);
+	//ReplaceString(g_map, sizeof(g_map), "workshop/", "", false);
 	ReplaceString(g_map, sizeof(g_map), "/", "-", false);
 	StringToLower(g_map, sizeof(g_map));
 	// reset plugin version cvar
@@ -2472,7 +2472,7 @@ CheckScores()
 				new String:half_time_config[128];
 				GetConVarString(g_h_half_time_config, half_time_config, sizeof(half_time_config));
 				ServerCommand("exec %s", half_time_config);
-				CreateTimer(10.0, HalfTime);
+				CreateTimer(16.0, HalfTime);
 			}
 			else if (GetTScore() == GetConVarInt(g_h_max_rounds) && GetCTScore() == GetConVarInt(g_h_max_rounds)) // complete draw
 			{
@@ -4382,6 +4382,7 @@ public Action:HalfTime(Handle:timer)
 {
 	// starts warmup for second half
 	ServerCommand("mp_warmuptime 5000");
+	ServerCommand("mp_warmup_start");
 	ReadySystem(true);
 	ShowInfo(0, true, false, 0);
 }
