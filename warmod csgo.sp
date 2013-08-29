@@ -289,7 +289,7 @@ public OnPluginStart()
 	g_i_account = FindSendPropOffs("CCSPlayer", "m_iAccount");
 	if (g_iAccount == -1)
 	{
-		SetFailState("[CS:S] Give Cash - Failed to find offset for m_iAccount!");
+		SetFailState("- Failed to find offset for m_iAccount!");
 	}
 	
 	HookConVarChange(g_h_active, OnActiveChange);
