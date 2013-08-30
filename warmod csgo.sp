@@ -473,10 +473,13 @@ public OnSocketError(Handle:socket, const errorType, const errorNum, any:hFile)
 
 public OnMapStart()
 {
+	decl String:g_MapName[64], String:g_WorkShopID[64];
+	GetCurrentWorkshopMap(g_MapName, sizeof(g_MapName), g_WorkShopID, sizeof(g_WorkShopID));
+	
+	LogMessage("Current Map: %s  Workshop ID: %s", g_MapName, g_WorkShopID);
+
 	// store current map
-	GetCurrentMap(g_map, sizeof(g_map));
-	//ReplaceString(g_map, sizeof(g_map), "workshop/", "", false);
-	ReplaceString(g_map, sizeof(g_map), "/", "-", false);
+	//GetCurrentMap(g_map, sizeof(g_map));
 	StringToLower(g_map, sizeof(g_map));
 	// reset plugin version cvar
 	SetConVarStringHidden(g_h_notify_version, WM_VERSION);
@@ -1697,6 +1700,21 @@ stock ShowTeamMoney(client)
 		}
 	}
 }
+
+stock GetCurrentWorkshopMap(String:g_MapName[], iMapBuf, String:g_WorkShopID[], iWorkShopBuf)
+{
+	decl String:g_CurMap[128];
+	decl String:g_CurMapSplit[2][64];
+		
+	GetCurrentMap(g_CurMap, sizeof(g_CurMap));
+	ReplaceString(g_CurMap, sizeof(g_CurMap), "workshop/", "", false);
+	
+	ExplodeString(g_CurMap, "/", g_CurMapSplit, 2, 64);
+	
+	strcopy(g_MapName, iMapBuf, g_CurMapSplit[0]);
+	strcopy(g_map, iMapBuf, g_CurMapSplit[0]);
+	strcopy(g_WorkShopID, iWorkShopBuf, g_CurMapSplit[1]);
+} 
 
 public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 {
