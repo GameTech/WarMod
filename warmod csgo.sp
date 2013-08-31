@@ -9,7 +9,7 @@
 #include <basecomm>
 #undef REQUIRE_PLUGIN
 #include <adminmenu>
-#include <autoupdate>
+//#include <autoupdate>
 
 new g_player_list[MAXPLAYERS + 1];
 new bool:g_premium_list[MAXPLAYERS + 1] = false;
@@ -345,18 +345,18 @@ public OnPluginStart()
 
 public OnAllPluginsLoaded()
 {
-	if (LibraryExists("pluginautoupdate"))
-	{
-		AutoUpdate_AddPlugin("autoupdate.warmod.gametech.com.au", "/cstrike/update.xml", WM_VERSION);
-	}
+	//if (LibraryExists("pluginautoupdate"))
+	//{
+	//	AutoUpdate_AddPlugin("autoupdate.warmod.gametech.com.au", "/cstrike/update.xml", WM_VERSION);
+	//}
 }
 
 public OnPluginEnd()
 {
-	if (LibraryExists("pluginautoupdate"))
-	{
-		AutoUpdate_RemovePlugin();
-	}
+	//if (LibraryExists("pluginautoupdate"))
+	//{
+	//	AutoUpdate_RemovePlugin();
+	//}
 	return 0;
 }
 
