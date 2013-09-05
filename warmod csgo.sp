@@ -1,6 +1,7 @@
 #pragma semicolon 1
 
 #include <sourcemod>
+#include <protobuf>
 #include <sdktools>
 #include <geoip>
 #include <cstrike>
@@ -9,7 +10,6 @@
 #include <basecomm>
 #undef REQUIRE_PLUGIN
 #include <adminmenu>
-//#include <autoupdate>
 
 new g_player_list[MAXPLAYERS + 1];
 new bool:g_premium_list[MAXPLAYERS + 1] = false;
@@ -343,23 +343,6 @@ public OnPluginStart()
 	CreateTimer(1800.0, LiveWire_Ping, _, TIMER_REPEAT);
 }
 
-public OnAllPluginsLoaded()
-{
-	//if (LibraryExists("pluginautoupdate"))
-	//{
-	//	AutoUpdate_AddPlugin("autoupdate.warmod.gametech.com.au", "/cstrike/update.xml", WM_VERSION);
-	//}
-}
-
-public OnPluginEnd()
-{
-	//if (LibraryExists("pluginautoupdate"))
-	//{
-	//	AutoUpdate_RemovePlugin();
-	//}
-	return 0;
-}
-
 public Action:LiveWire_ReConnect(client, args)
 {
 	if (GetConVarBool(g_h_lw_enabled))
@@ -483,12 +466,8 @@ public OnMapStart()
 	StringToLower(g_map, sizeof(g_map));
 	// reset plugin version cvar
 	SetConVarStringHidden(g_h_notify_version, WM_VERSION);
-	
-	if (LibraryExists("pluginautoupdate") && !GetConVarBool(FindConVar("sv_lan")))
-	{
-		// check for warmod updates
-		ServerCommand("sm_autoupdate_download warmod");
-	}
+	ServerCommand("mp_warmuptime 5000");
+	ServerCommand("mp_warmup_start");
 	
 	if (GetConVarBool(g_h_lw_enabled) && !g_lw_connected)
 	{
@@ -847,11 +826,11 @@ public Action:ReadyToggle(client, args)
 		ShowInfo(client, true, false, 0);
 		if (client != 0)
 		{
-			PrintToConsole(client, "<WarMod> %t", "Ready System Enabled");
+			PrintToConsole(client, "<WarMod_BFG> %t", "Ready System Enabled");
 		}
 		else
 		{
-			PrintToServer("<WarMod> %T", "Ready System Enabled", LANG_SERVER);
+			PrintToServer("<WarMod_BFG> %T", "Ready System Enabled", LANG_SERVER);
 		}
 		// check if anyone is ready
 		CheckReady();
@@ -863,11 +842,11 @@ public Action:ReadyToggle(client, args)
 		ReadySystem(false);
 		if (client != 0)
 		{
-			PrintToConsole(client, "<WarMod> %t", "Ready System Disabled");
+			PrintToConsole(client, "<WarMod_BFG> %t", "Ready System Disabled");
 		}
 		else
 		{
-			PrintToServer("<WarMod> %T", "Ready System Disabled", LANG_SERVER);
+			PrintToServer("<WarMod_BFG> %T", "Ready System Disabled", LANG_SERVER);
 		}
 	}
 	
@@ -1171,7 +1150,7 @@ public Action:ForceAllReady(client, args)
 		}
 		else
 		{
-			PrintToConsole(client, "<WarMod> %T", "Forced Ready", LANG_SERVER);
+			PrintToConsole(client, "<WarMod_BFG> %T", "Forced Ready", LANG_SERVER);
 		}
 		
 		// display ready system
@@ -1185,7 +1164,7 @@ public Action:ForceAllReady(client, args)
 		}
 		else
 		{
-			PrintToConsole(client, "<WarMod> %T", "Ready System Disabled2", LANG_SERVER);
+			PrintToConsole(client, "<WarMod_BFG> %T", "Ready System Disabled2", LANG_SERVER);
 		}
 	}
 	
@@ -1220,7 +1199,7 @@ public Action:ForceAllUnready(client, args)
 		}
 		else
 		{
-			PrintToServer("<WarMod> %T", "Forced Not Ready", LANG_SERVER);
+			PrintToServer("<WarMod_BFG> %T", "Forced Not Ready", LANG_SERVER);
 		}
 		
 		// display readym system
@@ -1234,7 +1213,7 @@ public Action:ForceAllUnready(client, args)
 		}
 		else
 		{
-			PrintToServer("<WarMod> %T", "Ready System Disabled2", LANG_SERVER);
+			PrintToServer("<WarMod_BFG> %T", "Ready System Disabled2", LANG_SERVER);
 		}
 	}
 	
@@ -1325,11 +1304,11 @@ public Action:ReadyOn(client, args)
 	ShowInfo(client, true, false, 0);
 	if (client != 0)
 	{
-		PrintToConsole(client, "<WarMod> %t", "Ready System Enabled");
+		PrintToConsole(client, "<WarMod_BFG> %t", "Ready System Enabled");
 	}
 	else
 	{
-		PrintToServer("<WarMod> %T", "Ready System Enabled", LANG_SERVER);
+		PrintToServer("<WarMod_BFG> %T", "Ready System Enabled", LANG_SERVER);
 	}
 	CheckReady();
 	
@@ -1370,11 +1349,11 @@ public Action:ReadyOff(client, args)
 	
 	if (client != 0)
 	{
-		PrintToConsole(client, "<WarMod> %t", "Ready System Disabled");
+		PrintToConsole(client, "<WarMod_BFG> %t", "Ready System Disabled");
 	}
 	else
 	{
-		PrintToServer("<WarMod> %T", "Ready System Disabled", LANG_SERVER);
+		PrintToServer("<WarMod_BFG> %T", "Ready System Disabled", LANG_SERVER);
 	}
 	
 	LogAction(client, -1, "\"ready_off\" (player \"%L\")", client);
@@ -1391,28 +1370,28 @@ public Action:ConsoleScore(client, args)
 		{
 			if (client != 0)
 			{
-				PrintToConsole(client, "<WarMod> %t:", "Match Is Live");
+				PrintToConsole(client, "<WarMod_BFG> %t:", "Match Is Live");
 			}
 			else
 			{
-				PrintToServer("<WarMod> %T:", "Match Is Live", LANG_SERVER);
+				PrintToServer("<WarMod_BFG> %T:", "Match Is Live", LANG_SERVER);
 			}
 		}
-		PrintToConsole(client, "<WarMod> %s: [%d] %s: [%d] MR%d", g_t_name, GetTScore(), g_ct_name, GetCTScore(), GetConVarInt(g_h_max_rounds));
+		PrintToConsole(client, "<WarMod_BFG> %s: [%d] %s: [%d] MR%d", g_t_name, GetTScore(), g_ct_name, GetCTScore(), GetConVarInt(g_h_max_rounds));
 		if (g_overtime)
 		{
-			PrintToConsole(client, "<WarMod> %t (%d): %s: [%d], %s: [%d] MR%d", "Score Overtime", g_overtime_count + 1, g_t_name, GetTOTScore(), g_ct_name, GetCTOTScore(), GetConVarInt(g_h_overtime_mr));
+			PrintToConsole(client, "<WarMod_BFG> %t (%d): %s: [%d], %s: [%d] MR%d", "Score Overtime", g_overtime_count + 1, g_t_name, GetTOTScore(), g_ct_name, GetCTOTScore(), GetConVarInt(g_h_overtime_mr));
 		}
 	}
 	else
 	{
 		if (client != 0)
 		{
-			PrintToConsole(client, "<WarMod> %t", "Match Not In Progress");
+			PrintToConsole(client, "<WarMod_BFG> %t", "Match Not In Progress");
 		}
 		else
 		{
-			PrintToServer("<WarMod> %T", "Match Not In Progress", LANG_SERVER);
+			PrintToServer("<WarMod_BFG> %T", "Match Not In Progress", LANG_SERVER);
 		}
 	}
 	
@@ -1424,11 +1403,11 @@ public Action:LastMatch(client, args)
 	// display details of last match to the console
 	if (g_last_scores[SCORE_T] != -1)
 	{
-		PrintToConsole(client, "<WarMod> Last Match: %s [%d] %s [%d] MR%d", g_last_names[SCORE_T], g_last_scores[SCORE_T], g_last_names[SCORE_CT], g_last_scores[SCORE_CT], g_last_maxrounds);
+		PrintToConsole(client, "<WarMod_BFG> Last Match: %s [%d] %s [%d] MR%d", g_last_names[SCORE_T], g_last_scores[SCORE_T], g_last_names[SCORE_CT], g_last_scores[SCORE_CT], g_last_maxrounds);
 	}
 	else
 	{
-		PrintToConsole(client, "<WarMod> No Matches Played");
+		PrintToConsole(client, "<WarMod_BFG> No Matches Played");
 	}
 	return Plugin_Handled;
 }
@@ -1474,11 +1453,11 @@ DisplayScore(client, msgindex, bool:priv)
 		GetScoreMsg(client, score_msg, sizeof(score_msg), GetTScore(), GetCTScore());
 		if (priv)
 		{
-			PrintToChat(client, "\x03<WarMod> %s", score_msg);
+			PrintToChat(client, "\x03<WarMod_BFG> %s", score_msg);
 		}
 		else
 		{
-			PrintToChatAll("\x03<WarMod> %s", score_msg);
+			PrintToChatAll("\x03<WarMod_BFG> %s", score_msg);
 		}
 	}
 	else if (msgindex == 1) // overtime play score
@@ -3453,7 +3432,7 @@ public Action:ReadyList(client, args)
 	new String:player_name[64];
 	new player_count;
 	
-	ReplyToCommand(client, "<WarMod> %T:", "Ready System", LANG_SERVER);
+	ReplyToCommand(client, "<WarMod_BFG> %T:", "Ready System", LANG_SERVER);
 	for (new i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) > 1)
@@ -3503,7 +3482,7 @@ public Action:NotLive(client, args)
 	
 	if (client == 0)
 	{
-		PrintToServer("<WarMod> %T", "Half Reset", LANG_SERVER);
+		PrintToServer("<WarMod_BFG> %T", "Half Reset", LANG_SERVER);
 	}
 	
 	LogAction(client, -1, "\"half_reset\" (player \"%L\")", client);
@@ -3529,7 +3508,7 @@ public Action:CancelMatch(client, args)
 	
 	if (client == 0)
 	{
-		PrintToServer("<WarMod> %T", "Match Reset", LANG_SERVER);
+		PrintToServer("<WarMod_BFG> %T", "Match Reset", LANG_SERVER);
 	}
 	
 	LogAction(client, -1, "\"match_reset\" (player \"%L\")", client);
@@ -3568,7 +3547,7 @@ public Action:CancelKnife(client, args)
 		}
 		if (client == 0)
 		{
-			PrintToServer("<WarMod> %T", "Knife Round Cancelled", LANG_SERVER);
+			PrintToServer("<WarMod_BFG> %T", "Knife Round Cancelled", LANG_SERVER);
 		}
 	}
 	else
@@ -3579,7 +3558,7 @@ public Action:CancelKnife(client, args)
 		}
 		else
 		{
-			PrintToServer("<WarMod> %T", "Knife Round Inactive", LANG_SERVER);
+			PrintToServer("<WarMod_BFG> %T", "Knife Round Inactive", LANG_SERVER);
 		}
 	}
 	
@@ -3631,7 +3610,7 @@ ShowInfo(client, bool:enable, bool:priv, time)
 	{
 		g_m_ready_up = CreatePanel();
 		new String:panel_title[128];
-		Format(panel_title, sizeof(panel_title), "<WarMod> %t", "Ready System Disabled", client);
+		Format(panel_title, sizeof(panel_title), "<WarMod_BFG> %t", "Ready System Disabled", client);
 		SetPanelTitle(g_m_ready_up, panel_title);
 		
 		for (new i = 1; i <= MaxClients; i++)
@@ -3756,7 +3735,7 @@ IsReadyEnabled(client, bool:silent)
 			}
 			else
 			{
-				PrintToServer("<WarMod> %T", "Ready System Disabled2", LANG_SERVER);
+				PrintToServer("<WarMod_BFG> %T", "Ready System Disabled2", LANG_SERVER);
 			}
 		}
 	}
@@ -3779,7 +3758,7 @@ IsLive(client, bool:silent)
 			}
 			else
 			{
-				PrintToServer("<WarMod> %T", "Match Is Live", LANG_SERVER);
+				PrintToServer("<WarMod_BFG> %T", "Match Is Live", LANG_SERVER);
 			}
 		}
 	}
@@ -4137,17 +4116,29 @@ stock SayText2(client, String:message[], size, bool:teamOnly=false, bool:silence
 		{
 			strcopy(team_prefix, sizeof(team_prefix), "\x01(TEAM) ");
 		}
-		
-		new Handle:h_message = StartMessage("SayText2", client_list, client_num);
-		BfWriteByte(h_message, client);
-		BfWriteByte(h_message, true);
-		new String:format[384];
-		
-		Format(format, sizeof(format), "\x01%s\x01%s%s\x03%%s1 \x01:  %%s2", g_premium_prefix[client], status_prefix, team_prefix);
-		BfWriteString(h_message, format);
-		
-		BfWriteString(h_message, client_name);
-		BfWriteString(h_message, message);
+		new Handle:h_message = StartMessageEx(GetUserMessageId("SayText2"), client_list, client_num, 0);
+		if (GetUserMessageType() == UM_Protobuf)
+		{
+			new String:format[384];
+			Format(format, sizeof(format), "\x01%s\x01%s%s\x03%%s1 \x01:  %%s2", g_premium_prefix[client], status_prefix, team_prefix);
+			PbSetInt(h_message, "ent_idx", client);
+			PbSetBool(h_message, "chat", true);
+			PbSetString(h_message, "msg_name", format);
+			PbAddString(h_message, "params", client_name);
+			PbAddString(h_message, "params", message);
+			PbAddString(h_message, "params", "");
+			PbAddString(h_message, "params", "");
+		}
+		else
+		{
+			BfWriteByte(h_message, client);
+			BfWriteByte(h_message, true);
+			new String:format[384];
+			Format(format, sizeof(format), "\x01%s\x01%s%s\x03%%s1 \x01:  %%s2", g_premium_prefix[client], status_prefix, team_prefix);
+			BfWriteString(h_message, format);
+			BfWriteString(h_message, client_name);
+			BfWriteString(h_message, message);
+		}
 		EndMessage();
 	}
 	
@@ -4220,7 +4211,7 @@ public Action:SayChat(client, args)
 		}
 		else
 		{
-			PrintToChat(client, "\03<WarMod> \x04%t", "No Permission");
+			PrintToChat(client, "\03<WarMod_BFG> \x04%t", "No Permission");
 		}
 	}
 	else if (message[0] == '!' || message[0] == '.' || message[0] == '/')
@@ -4251,7 +4242,7 @@ public Action:SayChat(client, args)
 			}
 			else
 			{
-				PrintToChat(client, "\03<WarMod> \x04%t", "ShowInfo Disabled");
+				PrintToChat(client, "\03<WarMod_BFG> \x04%t", "ShowInfo Disabled");
 			}
 		}
 		else if (StrEqual(command, "whois", false) || StrEqual(command, "w", false))
@@ -4262,7 +4253,7 @@ public Action:SayChat(client, args)
 			}
 			else
 			{
-				PrintToChat(client, "\03<WarMod> \x04GameTech Premium Member Feature");
+				PrintToChat(client, "\03<WarMod_BFG> \x04GameTech Premium Member Feature");
 			}
 		}
 		else if (StrEqual(command, "help", false))
@@ -4432,7 +4423,7 @@ stock LogEvent(const String:format[], any:...)
 	if (stats_method == 0 || stats_method == 2)
 	{
 		// standard server log files + udp stream
-		LogToGame("<WarMod> %s", event);
+		LogToGame("<WarMod_BFG> %s", event);
 	}
 	
 	// inject timestamp into JSON object, hacky but quite simple
@@ -4986,11 +4977,11 @@ public Action:WMVersion(client, args)
 {
 	if (client == 0)
 	{
-		PrintToServer("\"wm_version\" = \"%s\"\n - <WarMod> %s", WM_VERSION, WM_DESCRIPTION);
+		PrintToServer("\"wm_version\" = \"%s\"\n - <WarMod_BFG> %s", WM_VERSION, WM_DESCRIPTION);
 	}
 	else
 	{
-		PrintToConsole(client, "\"wm_version\" = \"%s\"\n - <WarMod> %s", WM_VERSION, WM_DESCRIPTION);
+		PrintToConsole(client, "\"wm_version\" = \"%s\"\n - <WarMod_BFG> %s", WM_VERSION, WM_DESCRIPTION);
 	}
 	
 	return Plugin_Handled;
