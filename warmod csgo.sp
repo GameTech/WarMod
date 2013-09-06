@@ -10,6 +10,7 @@
 #include <basecomm>
 #undef REQUIRE_PLUGIN
 #include <adminmenu>
+#include <updater>
 
 new g_player_list[MAXPLAYERS + 1];
 new bool:g_premium_list[MAXPLAYERS + 1] = false;
@@ -157,6 +158,12 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
 
 public OnPluginStart()
 {
+	//auto update
+	if (LibraryExists("updater"))
+	{
+	Updater_AddPlugin(UPDATE_URL)
+	}
+	
 	LoadTranslations("warmod.phrases");
 	LoadTranslations("common.phrases");
 	
@@ -341,6 +348,14 @@ public OnPluginStart()
 	
 	CreateTimer(600.0, LiveWire_Check, 0, TIMER_REPEAT);
 	CreateTimer(1800.0, LiveWire_Ping, _, TIMER_REPEAT);
+}
+
+public OnLibraryAdded(const String:name[])
+{
+    if (StrEqual(name, "updater"))
+    {
+        Updater_AddPlugin(UPDATE_URL)
+    }
 }
 
 public Action:LiveWire_ReConnect(client, args)
