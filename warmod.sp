@@ -161,7 +161,7 @@ public OnPluginStart()
 	//auto update
 	if (LibraryExists("updater"))
 	{
-	Updater_AddPlugin(UPDATE_URL)
+		Updater_AddPlugin(UPDATE_URL);
 	}
 	
 	LoadTranslations("warmod.phrases");
@@ -352,10 +352,10 @@ public OnPluginStart()
 
 public OnLibraryAdded(const String:name[])
 {
-    if (StrEqual(name, "updater"))
-    {
-        Updater_AddPlugin(UPDATE_URL)
-    }
+	if (StrEqual(name, "updater"))
+	{
+		Updater_AddPlugin(UPDATE_URL);
+	}
 }
 
 public Action:LiveWire_ReConnect(client, args)
