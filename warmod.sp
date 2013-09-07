@@ -194,6 +194,11 @@ public OnPluginStart()
 	RegAdminCmd("last_score", LastMatch, ADMFLAG_CUSTOM1, "Displays the score of the last match to the console");
 	RegAdminCmd("last", LastMatch, ADMFLAG_CUSTOM1, "Displays the score of the last match to the console");
 	
+	RegAdminCmd("notlive", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
+	RegAdminCmd("nl", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
+	RegAdminCmd("cancelhalf", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
+	RegAdminCmd("ch", NotLive, ADMFLAG_CUSTOM1, "Declares half not live and restarts the round");
+	
 	RegAdminCmd("cancelmatch", CancelMatch, ADMFLAG_CUSTOM1, "Declares match not live and restarts round");
 	RegAdminCmd("cm", CancelMatch, ADMFLAG_CUSTOM1, "Declares match not live and restarts round");
 	
@@ -1596,55 +1601,56 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 		}
 	}
 	
-	if (!g_match || !g_t_money || !GetConVarBool(g_h_round_money) || g_i_account == -1)
+	/*if (!g_match || !g_t_money || !GetConVarBool(g_h_round_money) || g_i_account == -1)
 	{
 		return;
-	}
-	
-	new the_money[MAXPLAYERS + 1];
-	new num_players;
-	
-	// sort by money
-	for (new i = 1; i <= MaxClients; i++)
+	}*/
+	if (g_t_money == true || GetConVarBool(g_h_round_money))
 	{
-		if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) > 1)
+		new the_money[MAXPLAYERS + 1];
+		new num_players;
+		
+		// sort by money
+		for (new i = 1; i <= MaxClients; i++)
 		{
-			the_money[num_players] = i;
-			num_players++;
-		}
-	}
-	
-	SortCustom1D(the_money, num_players, SortMoney);
-	
-	new String:player_name[64];
-	new String:player_money[12];
-	new String:has_weapon[4];
-	new pri_weapon;
-	
-	// display team players money
-	for (new i = 1; i <= MaxClients; i++)
-	{
-		for (new x = 0; x < num_players; x++)
-		{
-			GetClientName(the_money[x], player_name, sizeof(player_name));
-			if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == GetClientTeam(the_money[x]))
+			if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) > 1)
 			{
-				pri_weapon = GetPlayerWeaponSlot(the_money[x], 0);
-				if (pri_weapon == -1)
+				the_money[num_players] = i;
+				num_players++;
+			}
+		}
+		
+		SortCustom1D(the_money, num_players, SortMoney);
+		
+		new String:player_name[64];
+		new String:player_money[10];
+		new String:has_weapon[1];
+		new pri_weapon;
+		
+		// display team players money
+		for (new i = 1; i <= MaxClients; i++)
+		{
+			for (new x = 0; x < num_players; x++)
+			{
+				GetClientName(the_money[x], player_name, sizeof(player_name));
+				if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == GetClientTeam(the_money[x]))
 				{
-					has_weapon = ">";
+					pri_weapon = GetPlayerWeaponSlot(the_money[x], 0);
+					if (pri_weapon == -1)
+					{
+						has_weapon = ">";
+					}
+					else
+					{
+						has_weapon = "\0";
+					}
+					IntToMoney(GetEntData(the_money[x], g_i_account), player_money, sizeof(player_money));
+					PrintToChat(i, "\x01$%s \x04%s> \x03%s", player_money, has_weapon, player_name);
 				}
-				else
-				{
-					has_weapon = "\0";
-				}
-				IntToMoney(GetEntData(the_money[x], g_i_account), player_money, sizeof(player_money));
-				PrintToChat(i, "\x01$%s \x04%s> \x03%s", player_money, has_weapon, player_name);
 			}
 		}
 	}
 }
-
 public Action:AskTeamMoney(client, args)
 {
 	// show team money
@@ -1670,8 +1676,8 @@ stock ShowTeamMoney(client)
 	SortCustom1D(the_money, num_players, SortMoney);
 	
 	new String:player_name[64];
-	new String:player_money[12];
-	new String:has_weapon[4];
+	new String:player_money[10];
+	new String:has_weapon[1];
 	new pri_weapon;
 	
 	PrintToChat(client, "\x01--------");
@@ -2484,7 +2490,7 @@ CheckScores()
 				new String:half_time_config[128];
 				GetConVarString(g_h_half_time_config, half_time_config, sizeof(half_time_config));
 				ServerCommand("exec %s", half_time_config);
-				CreateTimer(16.0, HalfTime);
+				CreateTimer(15.1, HalfTime);
 			}
 			else if (GetTScore() == GetConVarInt(g_h_max_rounds) && GetCTScore() == GetConVarInt(g_h_max_rounds)) // complete draw
 			{
@@ -3164,7 +3170,6 @@ LiveOn3(bool:e_war)
 	g_live = true;
 	SetConVarIntHidden(g_h_t_score, GetTTotalScore());
 	SetConVarIntHidden(g_h_ct_score, GetCTTotalScore());
-
 }
 
 stock LiveOn3Override()
@@ -4973,9 +4978,9 @@ public Action:ShowPluginInfo(Handle:timer, any:client)
 		new String:play_out[64];
 		GetConVarName(g_h_play_out, play_out, sizeof(play_out));
 		PrintToConsole(client, "==============================================================");
-		PrintToConsole(client, "This server is running GameTech WarMod %s Server Plugin", WM_VERSION);
+		PrintToConsole(client, "This server is running WarMod [BFG] %s Server Plugin", WM_VERSION);
 		PrintToConsole(client, "");
-		PrintToConsole(client, "Created by Twelve-60 of GameTech (www.gametech.com.au)");
+		PrintToConsole(client, "Created by Twelve-60 of GameTech (www.gametech.com.au) and Updated by Versatile_BFG");
 		PrintToConsole(client, "");
 		PrintToConsole(client, "Messagemode commands:				Aliases:");
 		PrintToConsole(client, "  /ready - Mark yourself as ready 		  /rdy /r");
