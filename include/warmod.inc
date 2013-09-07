@@ -23,7 +23,7 @@
 
 #define MAX_PARAM_SIZE     512
 
-#define NUM_WEAPONS        42
+#define NUM_WEAPONS        55
 #define LOG_HIT_OFFSET     7
 
 #define	LOG_HIT_SHOTS      0
@@ -49,7 +49,7 @@
 #define CLUTCH_WON         3
 #define CLUTCH_NUM         4
 
-#define WM_VERSION         "0.1.2"
+#define WM_VERSION         "0.1.3"
 #define WM_DESCRIPTION     "An automative service created by Twelve-60 of GameTech (www.gametech.com.au) for CS:GO competition matches. Updated by Versatile_BFG"
 
 new String:g_team_name_cache[16][64];
