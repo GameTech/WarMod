@@ -1888,6 +1888,7 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 	}
 	
 	new attacker = GetClientOfUserId(GetEventInt(event, "attacker"));
+	new assist = GetClientOfUserId(GetEventInt(event, "assist"));
 	new victim = GetClientOfUserId(GetEventInt(event, "userid"));
 	new bool:headshot = GetEventBool(event, "headshot");
 	new String: weapon[64];
@@ -1897,6 +1898,16 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		if (attacker > 0 && victim > 0 && attacker != victim)
+		{
+			// normal frag
+			new String:attacker_log_string[384];
+			new String:victim_log_string[384];
+			CS_GetAdvLogString(attacker, attacker_log_string, sizeof(attacker_log_string));
+			CS_GetAdvLogString(victim, victim_log_string, sizeof(victim_log_string));
+			EscapeString(weapon, sizeof(weapon));
+			LogEvent("{\"event\": \"player_death\", \"attacker\": %s, \"victim\": %s, \"weapon\": \"%s\", \"headshot\": %d}", attacker_log_string, victim_log_string, weapon, headshot);
+		}
+		else if (attacker > 0 && victim > 0 && attacker != victim)
 		{
 			// normal frag
 			new String:attacker_log_string[384];
@@ -3684,7 +3695,7 @@ DispInfo(client, String:players_unready[], time)
 	new String:Temp[128];
 	SetGlobalTransTarget(client);
 	g_m_ready_up = CreatePanel();
-	Format(Temp, sizeof(Temp), "GameTech WarMod - %t\nAdvanced Gaming Modifications", "Ready System");
+	Format(Temp, sizeof(Temp), "WarMod [BFG]- %t\nAdvanced Gaming Modifications", "Ready System");
 	SetPanelTitle(g_m_ready_up, Temp);
 	DrawPanelText(g_m_ready_up, "\n \n");
 	Format(Temp, sizeof(Temp), "%t", "Match Begin Msg", GetConVarInt(g_h_min_ready));
