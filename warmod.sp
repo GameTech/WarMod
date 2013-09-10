@@ -1888,7 +1888,7 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 	}
 	
 	new attacker = GetClientOfUserId(GetEventInt(event, "attacker"));
-	new assist = GetClientOfUserId(GetEventInt(event, "assist"));
+	new assister = GetClientOfUserId(GetEventInt(event, "assister"));
 	new victim = GetClientOfUserId(GetEventInt(event, "userid"));
 	new bool:headshot = GetEventBool(event, "headshot");
 	new String: weapon[64];
@@ -1901,21 +1901,13 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 		{
 			// normal frag
 			new String:attacker_log_string[384];
+			new String:assister_log_string[384];
 			new String:victim_log_string[384];
 			CS_GetAdvLogString(attacker, attacker_log_string, sizeof(attacker_log_string));
+			CS_GetAdvLogString(assister, assister_log_string, sizeof(assister_log_string));
 			CS_GetAdvLogString(victim, victim_log_string, sizeof(victim_log_string));
 			EscapeString(weapon, sizeof(weapon));
-			LogEvent("{\"event\": \"player_death\", \"attacker\": %s, \"victim\": %s, \"weapon\": \"%s\", \"headshot\": %d}", attacker_log_string, victim_log_string, weapon, headshot);
-		}
-		else if (attacker > 0 && victim > 0 && attacker != victim)
-		{
-			// normal frag
-			new String:attacker_log_string[384];
-			new String:victim_log_string[384];
-			CS_GetAdvLogString(attacker, attacker_log_string, sizeof(attacker_log_string));
-			CS_GetAdvLogString(victim, victim_log_string, sizeof(victim_log_string));
-			EscapeString(weapon, sizeof(weapon));
-			LogEvent("{\"event\": \"player_death\", \"attacker\": %s, \"victim\": %s, \"weapon\": \"%s\", \"headshot\": %d}", attacker_log_string, victim_log_string, weapon, headshot);
+			LogEvent("{\"event\": \"player_death\", \"attacker\": %s, \"assister\": %s, \"victim\": %s, \"weapon\": \"%s\", \"headshot\": %d}", attacker_log_string, assister_log_string, victim_log_string, weapon, headshot);
 		}
 		else if (victim > 0 && victim == attacker || StrEqual(weapon, "worldspawn"))
 		{
