@@ -1913,10 +1913,12 @@ public Event_Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 		{
 			// suicide
 			new String:log_string[384];
+			new String:assister_log_string[384];
+			CS_GetAdvLogString(assister, assister_log_string, sizeof(assister_log_string));
 			CS_GetAdvLogString(victim, log_string, sizeof(log_string));
 			ReplaceString(weapon, sizeof(weapon), "worldspawn", "world");
 			EscapeString(weapon, sizeof(weapon));
-			LogEvent("{\"event\": \"player_suicide\", \"player\": %s, \"weapon\": \"%s\"}", log_string, weapon);
+			LogEvent("{\"event\": \"player_suicide\", \"player\": %s, \"assister\": %s, \"weapon\": \"%s\"}", log_string, assister_log_string, weapon);
 		}
 		if (victim > 0)
 		{
