@@ -1400,7 +1400,7 @@ public Action:ConsoleScore(client, args)
 		PrintToConsole(client, "%s %s: [%d] %s: [%d] MR%d", CHAT_PREFIX, g_t_name, GetTScore(), g_ct_name, GetCTScore(), GetConVarInt(g_h_max_rounds));
 		if (g_overtime)
 		{
-			PrintToConsole(client, "<WarMod_BFG> %t (%d): %s: [%d], %s: [%d] MR%d", "Score Overtime", g_overtime_count + 1, g_t_name, GetTOTScore(), g_ct_name, GetCTOTScore(), GetConVarInt(g_h_overtime_mr));
+			PrintToConsole(client, "%s %t (%d): %s: [%d], %s: [%d] MR%d", "Score Overtime", CHAT_PREFIX, g_overtime_count + 1, g_t_name, GetTOTScore(), g_ct_name, GetCTOTScore(), GetConVarInt(g_h_overtime_mr));
 		}
 	}
 	else
