@@ -846,7 +846,7 @@ public Action:ReadyToggle(client, args)
 		ShowInfo(client, true, false, 0);
 		if (client != 0)
 		{
-			PrintToConsole(client, "<WarMod_BFG> %t", "Ready System Enabled");
+			PrintToConsole(client, "%s%t", CHAT_PREFIX, "Ready System Enabled");
 		}
 		else
 		{
@@ -862,7 +862,7 @@ public Action:ReadyToggle(client, args)
 		ReadySystem(false);
 		if (client != 0)
 		{
-			PrintToConsole(client, "<WarMod_BFG> %t", "Ready System Disabled");
+			PrintToConsole(client, "%s%t", CHAT_PREFIX, "Ready System Disabled");
 		}
 		else
 		{
@@ -1324,7 +1324,7 @@ public Action:ReadyOn(client, args)
 	ShowInfo(client, true, false, 0);
 	if (client != 0)
 	{
-		PrintToConsole(client, "<WarMod_BFG> %t", "Ready System Enabled");
+		PrintToConsole(client, "%s%t", CHAT_PREFIX, "Ready System Enabled");
 	}
 	else
 	{
@@ -1369,7 +1369,7 @@ public Action:ReadyOff(client, args)
 	
 	if (client != 0)
 	{
-		PrintToConsole(client, "<WarMod_BFG> %t", "Ready System Disabled");
+		PrintToConsole(client, "%s%t", CHAT_PREFIX, "Ready System Disabled");
 	}
 	else
 	{
@@ -1390,14 +1390,14 @@ public Action:ConsoleScore(client, args)
 		{
 			if (client != 0)
 			{
-				PrintToConsole(client, "<WarMod_BFG> %t:", "Match Is Live");
+				PrintToConsole(client, "%s%t:", CHAT_PREFIX, "Match Is Live");
 			}
 			else
 			{
 				PrintToServer("<WarMod_BFG> %T:", "Match Is Live", LANG_SERVER);
 			}
 		}
-		PrintToConsole(client, "<WarMod_BFG> %s: [%d] %s: [%d] MR%d", g_t_name, GetTScore(), g_ct_name, GetCTScore(), GetConVarInt(g_h_max_rounds));
+		PrintToConsole(client, "%s %s: [%d] %s: [%d] MR%d", CHAT_PREFIX, g_t_name, GetTScore(), g_ct_name, GetCTScore(), GetConVarInt(g_h_max_rounds));
 		if (g_overtime)
 		{
 			PrintToConsole(client, "<WarMod_BFG> %t (%d): %s: [%d], %s: [%d] MR%d", "Score Overtime", g_overtime_count + 1, g_t_name, GetTOTScore(), g_ct_name, GetCTOTScore(), GetConVarInt(g_h_overtime_mr));
@@ -1407,7 +1407,7 @@ public Action:ConsoleScore(client, args)
 	{
 		if (client != 0)
 		{
-			PrintToConsole(client, "<WarMod_BFG> %t", "Match Not In Progress");
+			PrintToConsole(client, "%s%t", CHAT_PREFIX, "Match Not In Progress");
 		}
 		else
 		{
@@ -1423,7 +1423,7 @@ public Action:LastMatch(client, args)
 	// display details of last match to the console
 	if (g_last_scores[SCORE_T] != -1)
 	{
-		PrintToConsole(client, "<WarMod_BFG> Last Match: %s [%d] %s [%d] MR%d", g_last_names[SCORE_T], g_last_scores[SCORE_T], g_last_names[SCORE_CT], g_last_scores[SCORE_CT], g_last_maxrounds);
+		PrintToConsole(client, "%s Last Match: %s [%d] %s [%d] MR%d", CHAT_PREFIX, g_last_names[SCORE_T], g_last_scores[SCORE_T], g_last_names[SCORE_CT], g_last_scores[SCORE_CT], g_last_maxrounds);
 	}
 	else
 	{
@@ -1473,11 +1473,11 @@ DisplayScore(client, msgindex, bool:priv)
 		GetScoreMsg(client, score_msg, sizeof(score_msg), GetTScore(), GetCTScore());
 		if (priv)
 		{
-			PrintToChat(client, "\x03<WarMod_BFG> %s", score_msg);
+			PrintToChat(client, "%s %s", CHAT_PREFIX, score_msg);
 		}
 		else
 		{
-			PrintToChatAll("\x03<WarMod_BFG> %s", score_msg);
+			PrintToChatAll("%s %s", CHAT_PREFIX, score_msg);
 		}
 	}
 	else if (msgindex == 1) // overtime play score
@@ -1701,7 +1701,7 @@ stock ShowTeamMoney(client)
 	}
 }
 
-stock GetCurrentWorkshopMap(String:g_MapName[], iMapBuf, String:g_WorkShopID[], iWorkShopBuf)
+/*stock GetCurrentWorkshopMap(String:g_MapName[], iMapBuf, String:g_WorkShopID[], iWorkShopBuf)
 {
 	decl String:g_CurMap[128];
 	decl String:g_CurMapSplit[2][64];
@@ -1714,7 +1714,7 @@ stock GetCurrentWorkshopMap(String:g_MapName[], iMapBuf, String:g_WorkShopID[], 
 	strcopy(g_MapName, iMapBuf, g_CurMapSplit[0]);
 	strcopy(g_map, iMapBuf, g_CurMapSplit[0]);
 	strcopy(g_WorkShopID, iWorkShopBuf, g_CurMapSplit[1]);
-} 
+} */
 
 public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 {
@@ -3457,7 +3457,7 @@ public Action:ReadyList(client, args)
 	new String:player_name[64];
 	new player_count;
 	
-	ReplyToCommand(client, "<WarMod_BFG> %T:", "Ready System", LANG_SERVER);
+	ReplyToCommand(client, "%s %T:", CHAT_PREFIX, "Ready System", LANG_SERVER);
 	for (new i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) > 1)
@@ -3507,7 +3507,7 @@ public Action:NotLive(client, args)
 	
 	if (client == 0)
 	{
-		PrintToServer("<WarMod_BFG> %T", "Half Reset", LANG_SERVER);
+		PrintToServer("%s %T", CHAT_PREFIX, "Half Reset", LANG_SERVER);
 	}
 	
 	LogAction(client, -1, "\"half_reset\" (player \"%L\")", client);
@@ -3533,7 +3533,7 @@ public Action:CancelMatch(client, args)
 	
 	if (client == 0)
 	{
-		PrintToServer("<WarMod_BFG> %T", "Match Reset", LANG_SERVER);
+		PrintToServer("%s %T", CHAT_PREFIX, "Match Reset", LANG_SERVER);
 	}
 	
 	LogAction(client, -1, "\"match_reset\" (player \"%L\")", client);
@@ -3572,7 +3572,7 @@ public Action:CancelKnife(client, args)
 		}
 		if (client == 0)
 		{
-			PrintToServer("<WarMod_BFG> %T", "Knife Round Cancelled", LANG_SERVER);
+			PrintToServer("%s %T", CHAT_PREFIX, "Knife Round Cancelled", LANG_SERVER);
 		}
 	}
 	else
@@ -3583,7 +3583,7 @@ public Action:CancelKnife(client, args)
 		}
 		else
 		{
-			PrintToServer("<WarMod_BFG> %T", "Knife Round Inactive", LANG_SERVER);
+			PrintToServer("%s %T", CHAT_PREFIX, "Knife Round Inactive", LANG_SERVER);
 		}
 	}
 	
@@ -3635,7 +3635,7 @@ ShowInfo(client, bool:enable, bool:priv, time)
 	{
 		g_m_ready_up = CreatePanel();
 		new String:panel_title[128];
-		Format(panel_title, sizeof(panel_title), "<WarMod_BFG> %t", "Ready System Disabled", client);
+		Format(panel_title, sizeof(panel_title), "%s %t", CHAT_PREFIX, "Ready System Disabled", client);
 		SetPanelTitle(g_m_ready_up, panel_title);
 		
 		for (new i = 1; i <= MaxClients; i++)
@@ -3760,7 +3760,7 @@ IsReadyEnabled(client, bool:silent)
 			}
 			else
 			{
-				PrintToServer("<WarMod_BFG> %T", "Ready System Disabled2", LANG_SERVER);
+				PrintToServer("%s %T", CHAT_PREFIX, "Ready System Disabled2", LANG_SERVER);
 			}
 		}
 	}
@@ -3783,7 +3783,7 @@ IsLive(client, bool:silent)
 			}
 			else
 			{
-				PrintToServer("<WarMod_BFG> %T", "Match Is Live", LANG_SERVER);
+				PrintToServer("%s %T", CHAT_PREFIX, "Match Is Live", LANG_SERVER);
 			}
 		}
 	}
@@ -3806,7 +3806,7 @@ IsActive(client, bool:silent)
 			}
 			else
 			{
-				PrintToServer("WarMod - %T", "WarMod Inactive", LANG_SERVER);
+				PrintToServer("%s %T", CHAT_PREFIX, "WarMod Inactive", LANG_SERVER);
 			}
 		}
 	}
@@ -4236,7 +4236,7 @@ public Action:SayChat(client, args)
 		}
 		else
 		{
-			PrintToChat(client, "\03<WarMod_BFG> \x04%t", "No Permission");
+			PrintToChat(client, "%s%t", CHAT_PREFIX, "No Permission");
 		}
 	}
 	else if (message[0] == '!' || message[0] == '.' || message[0] == '/')
@@ -4267,7 +4267,7 @@ public Action:SayChat(client, args)
 			}
 			else
 			{
-				PrintToChat(client, "\03<WarMod_BFG> \x04%t", "ShowInfo Disabled");
+				PrintToChat(client, "%s%t", CHAT_PREFIX, "ShowInfo Disabled");
 			}
 		}
 		else if (StrEqual(command, "whois", false) || StrEqual(command, "w", false))
@@ -4278,7 +4278,7 @@ public Action:SayChat(client, args)
 			}
 			else
 			{
-				PrintToChat(client, "\03<WarMod_BFG> \x04GameTech Premium Member Feature");
+				PrintToChat(client, "%sGameTech Premium Member Feature", CHAT_PREFIX);
 			}
 		}
 		else if (StrEqual(command, "help", false))
@@ -4448,7 +4448,7 @@ stock LogEvent(const String:format[], any:...)
 	if (stats_method == 0 || stats_method == 2)
 	{
 		// standard server log files + udp stream
-		LogToGame("<WarMod_BFG> %s", event);
+		LogToGame("%s %s", CHAT_PREFIX, event);
 	}
 	
 	// inject timestamp into JSON object, hacky but quite simple
