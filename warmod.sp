@@ -476,18 +476,18 @@ public OnSocketError(Handle:socket, const errorType, const errorNum, any:hFile)
 
 public OnMapStart()
 {
-	decl String:g_MapName[64], String:g_WorkShopID[64];
-	GetCurrentWorkshopMap(g_MapName, sizeof(g_MapName), g_WorkShopID, sizeof(g_WorkShopID));
+	//decl String:g_MapName[64], String:g_WorkShopID[64];
+	//GetCurrentWorkshopMap(g_MapName, sizeof(g_MapName), g_WorkShopID, sizeof(g_WorkShopID));
 	
-	LogMessage("Current Map: %s  Workshop ID: %s", g_MapName, g_WorkShopID);
+	//LogMessage("Current Map: %s  Workshop ID: %s", g_MapName, g_WorkShopID);
 
 	// store current map
-	//GetCurrentMap(g_map, sizeof(g_map));
+	GetCurrentMap(g_map, sizeof(g_map));
 	StringToLower(g_map, sizeof(g_map));
 	// reset plugin version cvar
 	SetConVarStringHidden(g_h_notify_version, WM_VERSION);
-	ServerCommand("mp_warmuptime 5000");
-	ServerCommand("mp_warmup_start");
+	//ServerCommand("mp_warmuptime 5000");
+	//ServerCommand("mp_warmup_start");
 	
 	if (GetConVarBool(g_h_lw_enabled) && !g_lw_connected)
 	{
