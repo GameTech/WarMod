@@ -417,7 +417,7 @@ stock CS_EquipKnife(client)
 
 stock StripFilename(String:filename[], size)
 {
-	ReplaceString(filename, size, "\", "");
+	ReplaceString(filename, size, "\\", "");
 	ReplaceString(filename, size, "/", "");
 	ReplaceString(filename, size, ":", "");
 	ReplaceString(filename, size, "*", "");
