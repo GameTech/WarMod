@@ -115,6 +115,7 @@ new bool:g_ready_enabled = false;
 new bool:g_active = true;
 new bool:g_match = false;
 new bool:g_live = false;
+new bool:g_half_swap = false;
 new bool:g_playing_out = false;
 new bool:g_first_half = true;
 new bool:g_overtime = false;
@@ -476,13 +477,13 @@ public OnSocketError(Handle:socket, const errorType, const errorNum, any:hFile)
 
 public OnMapStart()
 {
-	//decl String:g_MapName[64], String:g_WorkShopID[64];
-	//GetCurrentWorkshopMap(g_MapName, sizeof(g_MapName), g_WorkShopID, sizeof(g_WorkShopID));
+	decl String:g_MapName[64], String:g_WorkShopID[64];
+	GetCurrentWorkshopMap(g_MapName, sizeof(g_MapName), g_WorkShopID, sizeof(g_WorkShopID));
 	
-	//LogMessage("Current Map: %s  Workshop ID: %s", g_MapName, g_WorkShopID);
+	LogMessage("Current Map: %s  Workshop ID: %s", g_MapName, g_WorkShopID);
 
 	// store current map
-	GetCurrentMap(g_map, sizeof(g_map));
+	//GetCurrentMap(g_map, sizeof(g_map));
 	StringToLower(g_map, sizeof(g_map));
 	// reset plugin version cvar
 	SetConVarStringHidden(g_h_notify_version, WM_VERSION);
@@ -651,6 +652,7 @@ ResetMatch(bool:silent)
 	// reset state
 	g_match = false;
 	g_live = false;
+	g_half_swap = false;
 	g_first_half = true;
 	g_second_half_first = false;
 	g_t_money = false;
@@ -1701,7 +1703,7 @@ stock ShowTeamMoney(client)
 	}
 }
 
-/*stock GetCurrentWorkshopMap(String:g_MapName[], iMapBuf, String:g_WorkShopID[], iWorkShopBuf)
+stock GetCurrentWorkshopMap(String:g_MapName[], iMapBuf, String:g_WorkShopID[], iWorkShopBuf)
 {
 	decl String:g_CurMap[128];
 	decl String:g_CurMapSplit[2][64];
@@ -1714,7 +1716,7 @@ stock ShowTeamMoney(client)
 	strcopy(g_MapName, iMapBuf, g_CurMapSplit[0]);
 	strcopy(g_map, iMapBuf, g_CurMapSplit[0]);
 	strcopy(g_WorkShopID, iWorkShopBuf, g_CurMapSplit[1]);
-} */
+}
 
 public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 {
@@ -2495,7 +2497,10 @@ CheckScores()
 				new String:half_time_config[128];
 				GetConVarString(g_h_half_time_config, half_time_config, sizeof(half_time_config));
 				ServerCommand("exec %s", half_time_config);
-				CreateTimer(15.1, HalfTime);
+				ReadySystem(true);
+				ShowInfo(0, true, false, 0);
+				ServerCommand("mp_halftime_pausetimer 1");
+				//CreateTimer(15.1, HalfTime);
 			}
 			else if (GetTScore() == GetConVarInt(g_h_max_rounds) && GetCTScore() == GetConVarInt(g_h_max_rounds)) // complete draw
 			{
@@ -3168,17 +3173,22 @@ LiveOn3(bool:e_war)
 		
 		LogPlayers();
 	}
-	
-	LiveOn3Override();
-	
 	g_match = true;
 	g_live = true;
 	SetConVarIntHidden(g_h_t_score, GetTTotalScore());
 	SetConVarIntHidden(g_h_ct_score, GetCTTotalScore());
+	LiveOn3Override();
 }
 
 stock LiveOn3Override()
 {
+	if (!g_first_half && !g_half_swap)
+	{
+		ServerCommand("mp_halftime_pausetimer 0");
+		PrintToChatAll("%s%t", CHAT_PREFIX, "LIVE!");
+		g_half_swap = true;
+		return true;
+	}
 	new Handle:kv = CreateKeyValues("live_override");
 	new String:path[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, path, sizeof(path), "configs/warmod_live_override.txt");
