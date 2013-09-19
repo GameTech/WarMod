@@ -140,6 +140,23 @@ new String:g_t_name_escaped[64]; // pre-escaped for warmod logs
 new String:g_ct_name[64];
 new String:g_ct_name_escaped[64]; // pre-escaped for warmod logs
 
+/* Pause and Unpause */
+new bool:g_pause_freezetime = true;
+new bool:g_pause_offered_t = false;
+new bool:g_pause_offered_ct = false;
+new bool:g_paused = false;
+
+new Handle:sv_pausable;
+new Handle:g_h_auto_unpause = INVALID_HANDLE;
+new Handle:g_h_auto_unpause_delay = INVALID_HANDLE;
+new Handle:g_h_pause_freezetime = INVALID_HANDLE;
+new Handle:g_h_pause_comfirm = INVALID_HANDLE;
+new Handle:g_h_pause_limit = INVALID_HANDLE;
+new Handle:g_h_t_pause_count = INVALID_HANDLE;
+new Handle:g_h_ct_pause_count = INVALID_HANDLE;
+new Handle:g_h_stored_timer = INVALID_HANDLE;
+
+
 /* admin menu */
 new Handle:g_h_menu = INVALID_HANDLE;
 
@@ -354,6 +371,15 @@ public OnPluginStart()
 	
 	CreateTimer(600.0, LiveWire_Check, 0, TIMER_REPEAT);
 	CreateTimer(1800.0, LiveWire_Ping, _, TIMER_REPEAT);
+	// Pause and Unpause stuff
+	sv_pausable = FindConVar ("sv_pausable");
+	g_h_pause_comfirm = CreateConVar("wm_pause_comfirm", "1", "Wait for other team to comfirm pause: 0 = off, 1 = on", FCVAR_NOTIFY);
+	g_h_auto_unpause = CreateConVar("wm_auto_unpause", "0", "Sets auto unpause: 0 = off, 1 = on", FCVAR_NOTIFY);
+	g_h_pause_freezetime = CreateConVar("wm_pause_freezetime", "1", "Wait for freeze time to pause: 0 = off, 1 = on", FCVAR_NOTIFY);
+	g_h_auto_unpause_delay = CreateConVar("wm_auto_unpause_delay", "180", "Sets the seconds to wait before auto unpause", FCVAR_NOTIFY, true, 0.0);
+	g_h_pause_limit = CreateConVar("wm_pause_limit", "1", "Sets max pause count per team per half", FCVAR_NOTIFY);
+	g_h_t_pause_count = CreateConVar("wm_t_pause_count", "0", "WarMod automatically updates this value to the Terrorist's total pause count", FCVAR_NOTIFY);
+	g_h_ct_pause_count = CreateConVar("wm_ct_pause_count", "0", "WarMod automatically updates this value to the Counter-Terrorist's total pause count", FCVAR_NOTIFY);
 }
 
 public OnLibraryAdded(const String:name[])
@@ -915,6 +941,227 @@ public Action:ActiveToggle(client, args)
 	LogAction(client, -1, "\"active_toggle\" (player \"%L\")", client);
 	
 	return Plugin_Handled;
+}
+
+//Pause and Unpause Commands + timers
+public Action:Pause(client, args)
+{
+    if (GetConVarBool(sv_pausable))
+    {
+        if (GetConVarBool(g_h_pause_comfirm))
+        {
+            if (GetClientTeam(client) == 3 && g_h_ct_pause_count != g_h_pause_limit)
+            {
+                g_pause_offered_ct = true;
+                PrintToChatAll("CT have asked for a Pause. Please type !pause to pause the match.");
+                g_h_stored_timer = CreateTimer(30.0, PauseTimeout);
+            }
+            if (GetClientTeam(client) == 2 && g_h_ct_pause_count != g_h_pause_limit)
+            {
+                g_pause_offered_t = true;
+                PrintToChatAll("T have asked for a Pause. Please type !pause to pause the match.");
+                g_h_stored_timer = CreateTimer(30.0, PauseTimeout);
+            }
+            if (GetClientTeam(client) == 2 && g_pause_offered_ct == true)
+            {
+				if(g_h_stored_timer != INVALID_HANDLE)
+				{
+					KillTimer(g_h_stored_timer);
+					g_h_stored_timer = INVALID_HANDLE;
+				}
+				
+				g_pause_offered_ct = false;
+				g_h_ct_pause_count++;
+				
+				if (GetConVarBool(g_h_pause_freezetime))
+				{
+					PrintToChatAll("Game will pause at the end of the round");
+					g_pause_freezetime = true;
+				}
+				else
+				{
+					PrintToChatAll("Game is Paused. Please type !unpause to unpause the game.");
+					if (GetConVarBool(g_h_auto_unpause))
+					{
+						PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+						g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
+					}
+					g_paused = true;
+					ServerCommand("pause");
+				}
+			}
+			if (GetClientTeam(client) == 3 && g_pause_offered_t == true)
+			{
+				if(g_h_stored_timer != INVALID_HANDLE)
+				{
+					KillTimer(g_h_stored_timer);
+					g_h_stored_timer = INVALID_HANDLE;
+				}
+				g_pause_offered_t = false;
+				g_h_t_pause_count++;
+				
+				if (GetConVarBool(g_h_pause_freezetime))
+				{
+					PrintToChatAll("Game will pause at the end of the round");
+					g_pause_freezetime = true;
+				}
+				else
+				{
+					PrintToChatAll("Game is Paused. Please type !unpause to unpause the game.");
+					if (GetConVarBool(g_h_auto_unpause))
+					{
+						PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+						g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
+					}
+					g_paused = true;
+					ServerCommand("pause");
+				}
+			}
+			if (GetClientTeam(client) == 2 && g_h_t_pause_count == g_h_pause_limit)
+			{
+				PrintToChat(client, "You have used your pause limit already");
+			}
+			if (GetClientTeam(client) == 3 && g_h_ct_pause_count == g_h_pause_limit)
+			{
+				PrintToChat(client, "You have used your pause limit already");
+			}
+			if (GetClientTeam(client) < 2 )
+			{
+				PrintToChat(client, "You must be on T or CT to enable !pause");
+			}
+		}
+		if (GetClientTeam(client) == 3 && g_h_ct_pause_count != g_h_pause_limit)
+		{
+			g_h_ct_pause_count++
+			if (GetConVarBool(g_h_pause_freezetime))
+			{
+				PrintToChatAll("Game will pause at the end of the round");
+				g_pause_freezetime = true;
+			}
+			else
+			{
+				PrintToChatAll("Game is Paused. Please type !unpause to unpause the game.");
+				if(GetConVarBool(g_h_auto_unpause))
+				{
+					PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+					g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
+				}
+				g_paused = true;
+				ServerCommand("pause");
+			}
+		}
+		if (GetClientTeam(client) == 2 &&  g_h_t_pause_count != g_h_pause_limit)
+		{
+			g_h_t_pause_count++
+			if (GetConVarBool(g_h_pause_freezetime))
+			{
+				PrintToChatAll("Game will pause at the end of the round");
+				g_pause_freezetime = true;
+			}
+			else
+			{
+				PrintToChatAll("Game is Paused. Please type !unpause to unpause the game.");
+				if(GetConVarBool(g_h_auto_unpause))
+				{
+					PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+					g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
+				}
+				g_paused = true;
+				ServerCommand("pause");
+			}
+		}
+		if (GetClientTeam(client) == 2 && g_h_t_pause_count == g_h_pause_limit)
+		{
+			PrintToChat(client, "You have used your pause limit already");
+		}
+		if (GetClientTeam(client) == 3 && g_h_ct_pause_count == g_h_pause_limit)
+		{
+			PrintToChat(client, "You have used your pause limit already");
+		}
+		if (GetClientTeam(client) < 2)
+		{
+		PrintToChat(client, "must be on T or CT to enable !pause");
+		}
+	}
+	else
+	{
+		PrintToChatAll("sv_pauseable is set to 0. Pause fuction not enabled");
+	}
+}
+
+public Action:UnPause(client, args)
+{
+	if (g_paused)
+	{
+		if (GetConVarBool(g_h_pause_comfirm))
+		{
+			if (GetClientTeam(client) == 3 && g_pause_offered_ct == false && g_pause_offered_t == false)
+			{
+				g_pause_offered_ct = true;
+				PrintToChatAll("CT have asked to unpause the game. Please type /unpause to unpause the match.");
+			}
+			if (GetClientTeam(client) == 2 && g_pause_offered_t == false && g_pause_offered_ct == false)
+			{
+				g_pause_offered_t = true;
+				PrintToChatAll("T have asked to unpause the game. Please type /unpause to unpause the match.");
+			}
+			if (GetClientTeam(client) == 2 && g_pause_offered_ct == true)
+			{
+				g_pause_offered_ct = false;
+				g_paused = false;
+				ServerCommand("unpause");
+			}
+			if (GetClientTeam(client) == 3 && g_pause_offered_t == true)
+			{
+				g_pause_offered_t = false;
+				g_paused = false;
+				ServerCommand("unpause");
+			}
+			if (GetClientTeam(client) < 2 )
+			{
+				PrintToChat(client, "You must be on T or CT to enable /unpause");
+			}
+		}
+		else
+		{
+			if (GetClientTeam(client) == 2)
+			{
+				PrintToChatAll("T have unpaused the match");
+				g_paused = false;
+				ServerCommand("unpause");
+			}
+			if (GetClientTeam(client) == 3)
+			{
+				PrintToChatAll("T have unpaused the match");
+				g_paused = false;
+				ServerCommand("unpause");
+			}
+			if (GetClientTeam(client) < 2 )
+			{
+				PrintToChat(client, "You must be on T or CT to enable /unpause");
+			}
+		}
+	}
+	else
+	{
+		PrintToChat(client,"Server is not paused or was paused via rcon.");
+	}
+}
+
+public Action:PauseTimeout(Handle:timer)
+{
+	g_h_stored_timer = INVALID_HANDLE;
+	PrintToChatAll("!pause offer was not comfirmed by the other team.");
+	g_pause_offered_ct = false;
+	g_pause_offered_t = false;
+}
+public Action:UnPauseTimer(Handle:timer)
+{
+	g_h_stored_timer = INVALID_HANDLE;
+	PrintToChatAll("Auto Unpaused!");
+	ServerCommand("unpause");
+	g_pause_offered_ct = false;
+	g_pause_offered_t = false;
 }
 
 public Action:ChangeMinReady(client, args)
@@ -1725,6 +1972,19 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	//Pause command fire on round end May change to on round start
+	if (g_pause_freezetime == true)
+	{
+		g_pause_freezetime = false;
+		if(GetConVarBool(g_h_auto_unpause))
+		{
+			PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+			g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
+		}
+		g_paused = true;
+		ServerCommand("pause");
+	}
+	
 	new winner = GetEventInt(event, "winner");
 	
 	// stats
@@ -1749,11 +2009,8 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 			// knife round won
 			if (GetConVarBool(g_h_auto_knife) && GetConVarBool(g_h_auto_ready))
 			{
-				// show ready system
-				ReadyChangeAll(0, false, true);
-				SetAllCancelled(false);
-				ReadySystem(true);
-				ShowInfo(0, true, false, 0);
+				PrintToServer( "Team %d voting for stay/swap.", winner );
+				DisplayStayLeaveVote( winner );
 			}
 			if (GetConVarBool(g_h_stats_enabled))
 			{
@@ -3981,6 +4238,73 @@ public Handler_ReadySystem(Handle:menu, MenuAction:action, param1, param2)
 		if (param2 == 3)
 		{
 			g_cancel_list[param1] = true;
+		}
+	}
+}
+
+//This is from warriormod [http://forums.alliedmods.net/showthread.php?t=64768] Will change in future to /stay or /swap command.
+DisplayStayLeaveVote( winTeamId )
+{
+	// Maybe these guys are _still_ voting? Then don't send a new vote.
+	if( !IsVoteInProgress() )
+	{
+		new Handle:menu = CreateMenu( Handle_VoteStayLeave );
+		SetMenuTitle( menu, "Teams?"    );
+		AddMenuItem(  menu, "0", "Stay" );
+		AddMenuItem(  menu, "1", "Swap");
+		SetMenuExitButton( menu, false );
+		
+		new UsersInTeam[16],
+		    UsersCount = 0;
+		
+		for( new i = 1; i <= max_clients; i++ )
+		{
+			if( IsClientInGame(i) && GetClientTeam(i) == winTeamId )
+			{
+				UsersInTeam[UsersCount++] = i;
+			}
+		}
+		VoteMenu( menu, UsersInTeam, UsersCount, 30 );	
+	}
+}
+public Handle_VoteStayLeave( Handle:menu, MenuAction:action, param1, param2 )
+{
+	if( action == MenuAction_End )
+	{
+		CloseHandle(menu);
+	}
+	else if( action == MenuAction_VoteEnd )
+	{
+		// Stay or Leave has been voted by the winners, act accordingly
+		//war_mode = MODE_NONE;
+		if( param1 == 0 )
+		{
+			// Stay
+			// show ready system
+			ReadyChangeAll(0, false, true);
+			SetAllCancelled(false);
+			ReadySystem(true);
+			ShowInfo(0, true, false, 0);
+		}
+		else
+		{
+			/*// Testing: Autoswitch all clients
+			new theClientTeam = 0;
+			for( new i = 1; i <= max_clients; i++ )
+			{
+				if( IsClientInGame(i) && ( theClientTeam = GetClientTeam(i) ) >= TEAMINDEX_T )
+				{
+					// Switch
+					CS_SwitchTeam( i, 5 - theClientTeam );
+				}
+			}*/
+			
+			CS_SwapTeams();
+			// show ready system
+			ReadyChangeAll(0, false, true);
+			SetAllCancelled(false);
+			ReadySystem(true);
+			ShowInfo(0, true, false, 0);
 		}
 	}
 }
