@@ -4243,7 +4243,7 @@ public Handler_ReadySystem(Handle:menu, MenuAction:action, param1, param2)
 }
 
 //This is from warriormod [http://forums.alliedmods.net/showthread.php?t=64768] Will change in future to /stay or /swap command.
-DisplayStayLeaveVote( winTeamId )
+DisplayStayLeaveVote( winner )
 {
 	// Maybe these guys are _still_ voting? Then don't send a new vote.
 	if( !IsVoteInProgress() )
@@ -4259,7 +4259,7 @@ DisplayStayLeaveVote( winTeamId )
 		
 		for( new i = 1; i <= max_clients; i++ )
 		{
-			if( IsClientInGame(i) && GetClientTeam(i) == winTeamId )
+			if( IsClientInGame(i) && GetClientTeam(i) == winner )
 			{
 				UsersInTeam[UsersCount++] = i;
 			}
