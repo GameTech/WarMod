@@ -1,6 +1,6 @@
 #define UPDATE_URL    "http://bfg-esports.com/myplugin/updatefile.txt"
 
-#define CHAT_PREFIX             "\x03<WarMod_BFG>\x04"
+#define CHAT_PREFIX             "\x03 <WarMod_BFG> \x04"
 #define SPECTATOR_TEAM          1
 #define TERRORIST_TEAM          2
 #define COUNTER_TERRORIST_TEAM  3
