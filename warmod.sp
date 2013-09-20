@@ -74,6 +74,7 @@ new Handle:g_h_max_players = INVALID_HANDLE;
 new Handle:g_h_match_config = INVALID_HANDLE;
 new Handle:g_h_end_config = INVALID_HANDLE;
 new Handle:g_h_half_time_config = INVALID_HANDLE;
+new Handle:g_h_half_time_brake = INVALID_HANDLE;
 new Handle:g_h_round_money = INVALID_HANDLE;
 new Handle:g_h_ingame_scores = INVALID_HANDLE;
 new Handle:g_h_max_rounds = INVALID_HANDLE;
@@ -99,6 +100,7 @@ new Handle:g_h_warmup_respawn = INVALID_HANDLE;
 new Handle:g_h_status = INVALID_HANDLE;
 new Handle:g_h_upload_results = INVALID_HANDLE;
 new Handle:g_h_table_name = INVALID_HANDLE;
+new Handle:g_h_chat_prefix = INVALID_HANDLE;
 new Handle:g_h_t = INVALID_HANDLE;
 new Handle:g_h_ct = INVALID_HANDLE;
 new Handle:g_h_notify_version = INVALID_HANDLE;
@@ -283,6 +285,7 @@ public OnPluginStart()
 	g_h_match_config = CreateConVar("wm_match_config", "warmod/ruleset_mr15.cfg", "Sets the match config to load on Live on 3");
 	g_h_end_config = CreateConVar("wm_reset_config", "warmod/on_match_end.cfg", "Sets the config to load at the end/reset of a match");
 	g_h_half_time_config = CreateConVar("wm_half_time_config", "warmod/on_match_half_time.cfg", "Sets the config to load at half time of a match (including overtime)");
+	g_h_half_time_brake = CreateConVar("wm_half_time_brake", "1", "Pause game at halftime for a brake, No brake = 0, Brake = 1");
 	g_h_round_money = CreateConVar("wm_round_money", "1", "Enable or disable a client's team mates money to be displayed at the start of a round (to him only)", FCVAR_NOTIFY);
 	g_h_ingame_scores = CreateConVar("wm_ingame_scores", "1", "Enable or disable ingame scores to be showed at the end of each round", FCVAR_NOTIFY);
 	g_h_max_rounds = CreateConVar("wm_max_rounds", "15", "Sets maxrounds before auto team switch", FCVAR_NOTIFY);
@@ -308,6 +311,7 @@ public OnPluginStart()
 	g_h_status = CreateConVar("wm_status", "0", "WarMod automatically updates this value to the corresponding match status code", FCVAR_NOTIFY);
 	g_h_upload_results = CreateConVar("wm_upload_results", "0", "Enable or disable the uploading of match results via MySQL", FCVAR_NOTIFY);
 	g_h_table_name = CreateConVar("wm_table_name", "wm_results", "The MySQL table name to store match results in");
+	g_h_chat_prefix = CreateConVar("wm_chat_prefix", CHAT_PREFIX, "Change the chat prefix. Default is <WarMod_BFG>", FCVAR_NOTIFY);
 	g_h_t = CreateConVar("wm_t", DEFAULT_T_NAME, "Team starting terrorists, designed for score and demo naming purposes", FCVAR_NOTIFY);
 	g_h_ct = CreateConVar("wm_ct", DEFAULT_CT_NAME, "Team starting counter-terrorists, designed for score and demo naming purposes", FCVAR_NOTIFY);
 	g_h_t_score = CreateConVar("wm_t_score", "0", "WarMod automatically updates this value to the Terrorist's total score", FCVAR_NOTIFY);
@@ -513,8 +517,6 @@ public OnMapStart()
 	StringToLower(g_map, sizeof(g_map));
 	// reset plugin version cvar
 	SetConVarStringHidden(g_h_notify_version, WM_VERSION);
-	//ServerCommand("mp_warmuptime 5000");
-	//ServerCommand("mp_warmup_start");
 	
 	if (GetConVarBool(g_h_lw_enabled) && !g_lw_connected)
 	{
@@ -953,13 +955,13 @@ public Action:Pause(client, args)
             if (GetClientTeam(client) == 3 && g_h_ct_pause_count != g_h_pause_limit)
             {
                 g_pause_offered_ct = true;
-                PrintToChatAll("%s CT have asked for a Pause. Please type !pause to pause the match.", CHAT_PREFIX);
+                PrintToChatAll("%s CT have asked for a Pause. Please type !pause to pause the match.", GetConVarFloat(g_h_chat_prefix));
                 g_h_stored_timer = CreateTimer(30.0, PauseTimeout);
             }
             else if (GetClientTeam(client) == 2 && g_h_t_pause_count != g_h_pause_limit)
             {
                 g_pause_offered_t = true;
-                PrintToChatAll("%s T have asked for a Pause. Please type !pause to pause the match.", CHAT_PREFIX);
+                PrintToChatAll("%s T have asked for a Pause. Please type !pause to pause the match.", GetConVarFloat(g_h_chat_prefix));
                 g_h_stored_timer = CreateTimer(30.0, PauseTimeout);
             }
             else if (GetClientTeam(client) == 2 && g_pause_offered_ct == true)
@@ -983,7 +985,7 @@ public Action:Pause(client, args)
 					PrintToChatAll("%s Game is Paused. Please type !unpause to unpause the game.", CHAT_PREFIX);
 					if (GetConVarBool(g_h_auto_unpause))
 					{
-						PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, g_h_auto_unpause_delay);
+						PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, GetConVarFloat(g_h_auto_unpause_delay));
 						g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
 					}
 					g_paused = true;
@@ -1010,7 +1012,7 @@ public Action:Pause(client, args)
 					PrintToChatAll("%s Game is Paused. Please type !unpause to unpause the game.", CHAT_PREFIX);
 					if (GetConVarBool(g_h_auto_unpause))
 					{
-						PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, g_h_auto_unpause_delay);
+						PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, GetConVarFloat(g_h_auto_unpause_delay));
 						g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
 					}
 					g_paused = true;
@@ -1043,7 +1045,7 @@ public Action:Pause(client, args)
 				PrintToChatAll("%s Game is Paused. Please type !unpause to unpause the game.", CHAT_PREFIX);
 				if(GetConVarBool(g_h_auto_unpause))
 				{
-					PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, g_h_auto_unpause_delay);
+					PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, GetConVarFloat(g_h_auto_unpause_delay));
 					g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
 				}
 				g_paused = true;
@@ -1063,7 +1065,7 @@ public Action:Pause(client, args)
 				PrintToChatAll("%s Game is Paused. Please type !unpause to unpause the game.", CHAT_PREFIX);
 				if(GetConVarBool(g_h_auto_unpause))
 				{
-					PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, g_h_auto_unpause_delay);
+					PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, GetConVarFloat(g_h_auto_unpause_delay));
 					g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
 				}
 				g_paused = true;
@@ -2266,7 +2268,6 @@ public Event_Player_Name(Handle:event, const String:name[], bool:dontBroadcast)
 		EscapeString(newName, sizeof(newName));
 		LogEvent("{\"event\": \"player_name\", \"player\": %s, \"newName\": \"%s\"}", log_string, newName);
 	}
-	
 	if (g_ready_enabled && !g_live)
 	{
 		CreateTimer(0.1, UpdateInfo);
@@ -2744,7 +2745,6 @@ CheckScores()
 					CreateTimer(GetConVarFloat(g_h_auto_swap_delay), Swap, TIMER_FLAG_NO_MAPCHANGE);
 				}*/
 				
-				g_live = false;
 				g_t_money = false;
 				g_first_half = false;
 				SetAllCancelled(false);
@@ -2765,10 +2765,13 @@ CheckScores()
 				new String:half_time_config[128];
 				GetConVarString(g_h_half_time_config, half_time_config, sizeof(half_time_config));
 				ServerCommand("exec %s", half_time_config);
-				ReadySystem(true);
-				ShowInfo(0, true, false, 0);
-				ServerCommand("mp_halftime_pausetimer 1");
-				//CreateTimer(15.1, HalfTime);
+				if (GetConVarInt(g_h_half_time_brake))
+				{
+					g_live = false;
+					ReadySystem(true);
+					ShowInfo(0, true, false, 0);
+					ServerCommand("mp_halftime_pausetimer 1");
+				}
 			}
 			else if (GetTScore() == GetConVarInt(g_h_max_rounds) && GetCTScore() == GetConVarInt(g_h_max_rounds)) // complete draw
 			{
@@ -4359,6 +4362,7 @@ public Action:ChangeT(client, args)
 		g_t_name_escaped = g_t_name;
 		EscapeString(g_t_name_escaped, sizeof(g_t_name_escaped));
 		SetConVarStringHidden(g_h_t, name);
+		ServerCommand("mp_teamname_2 %s", name);
 		if (client != 0)
 		{
 			PrintToChat(client, "%s%t", CHAT_PREFIX, "Change T Name", name);
@@ -4409,6 +4413,7 @@ public Action:ChangeCT(client, args)
 		g_ct_name_escaped = g_ct_name;
 		EscapeString(g_ct_name_escaped, sizeof(g_ct_name_escaped));
 		SetConVarStringHidden(g_h_ct, name);
+		ServerCommand("mp_teamname_1 %s", name);
 		if (client != 0)
 		{
 			PrintToChat(client, "%s%t", CHAT_PREFIX, "Change CT Name", name);
