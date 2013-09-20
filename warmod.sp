@@ -374,7 +374,7 @@ public OnPluginStart()
 	// Pause and Unpause stuff
 	sv_pausable = FindConVar ("sv_pausable");
 	g_h_pause_comfirm = CreateConVar("wm_pause_comfirm", "1", "Wait for other team to comfirm pause: 0 = off, 1 = on", FCVAR_NOTIFY);
-	g_h_auto_unpause = CreateConVar("wm_auto_unpause", "0", "Sets auto unpause: 0 = off, 1 = on", FCVAR_NOTIFY);
+	g_h_auto_unpause = CreateConVar("wm_auto_unpause", "1", "Sets auto unpause: 0 = off, 1 = on", FCVAR_NOTIFY);
 	g_h_pause_freezetime = CreateConVar("wm_pause_freezetime", "1", "Wait for freeze time to pause: 0 = off, 1 = on", FCVAR_NOTIFY);
 	g_h_auto_unpause_delay = CreateConVar("wm_auto_unpause_delay", "180", "Sets the seconds to wait before auto unpause", FCVAR_NOTIFY, true, 0.0);
 	g_h_pause_limit = CreateConVar("wm_pause_limit", "1", "Sets max pause count per team per half", FCVAR_NOTIFY);
@@ -956,7 +956,7 @@ public Action:Pause(client, args)
                 PrintToChatAll("CT have asked for a Pause. Please type !pause to pause the match.");
                 g_h_stored_timer = CreateTimer(30.0, PauseTimeout);
             }
-            if (GetClientTeam(client) == 2 && g_h_ct_pause_count != g_h_pause_limit)
+            if (GetClientTeam(client) == 2 && g_h_t_pause_count != g_h_pause_limit)
             {
                 g_pause_offered_t = true;
                 PrintToChatAll("T have asked for a Pause. Please type !pause to pause the match.");
@@ -1030,9 +1030,9 @@ public Action:Pause(client, args)
 				PrintToChat(client, "You must be on T or CT to enable !pause");
 			}
 		}
-		if (GetClientTeam(client) == 3 && g_h_ct_pause_count != g_h_pause_limit)
+		if (GetClientTeam(client) == 3 && g_h_ct_pause_count != g_h_pause_limit && !GetConVarBool(g_h_pause_comfirm))
 		{
-			g_h_ct_pause_count++
+			g_h_ct_pause_count++;
 			if (GetConVarBool(g_h_pause_freezetime))
 			{
 				PrintToChatAll("Game will pause at the end of the round");
@@ -1050,9 +1050,9 @@ public Action:Pause(client, args)
 				ServerCommand("pause");
 			}
 		}
-		if (GetClientTeam(client) == 2 &&  g_h_t_pause_count != g_h_pause_limit)
+		if (GetClientTeam(client) == 2 &&  g_h_t_pause_count != g_h_pause_limit && !GetConVarBool(g_h_pause_comfirm))
 		{
-			g_h_t_pause_count++
+			g_h_t_pause_count++;
 			if (GetConVarBool(g_h_pause_freezetime))
 			{
 				PrintToChatAll("Game will pause at the end of the round");
@@ -1098,12 +1098,12 @@ public Action:UnPause(client, args)
 			if (GetClientTeam(client) == 3 && g_pause_offered_ct == false && g_pause_offered_t == false)
 			{
 				g_pause_offered_ct = true;
-				PrintToChatAll("CT have asked to unpause the game. Please type /unpause to unpause the match.");
+				PrintToConsoleAll("CT have asked to unpause the game. Please type /unpause to unpause the match.");
 			}
 			if (GetClientTeam(client) == 2 && g_pause_offered_t == false && g_pause_offered_ct == false)
 			{
 				g_pause_offered_t = true;
-				PrintToChatAll("T have asked to unpause the game. Please type /unpause to unpause the match.");
+				PrintToConsoleAll("T have asked to unpause the game. Please type /unpause to unpause the match.");
 			}
 			if (GetClientTeam(client) == 2 && g_pause_offered_ct == true)
 			{
@@ -1119,7 +1119,7 @@ public Action:UnPause(client, args)
 			}
 			if (GetClientTeam(client) < 2 )
 			{
-				PrintToChat(client, "You must be on T or CT to enable /unpause");
+				PrintToConsole(client, "You must be on T or CT to enable /unpause");
 			}
 		}
 		else
@@ -1138,13 +1138,14 @@ public Action:UnPause(client, args)
 			}
 			if (GetClientTeam(client) < 2 )
 			{
-				PrintToChat(client, "You must be on T or CT to enable /unpause");
+				PrintToConsole(client, "You must be on T or CT to enable /unpause");
 			}
 		}
 	}
 	else
 	{
 		PrintToChat(client,"Server is not paused or was paused via rcon.");
+		PrintToConsole(client,"Server is not paused or was paused via rcon.");
 	}
 }
 
@@ -1666,6 +1667,14 @@ public Action:ConsoleScore(client, args)
 	
 	return Plugin_Handled;
 }
+
+stock PrintToConsoleAll(const String:message[])
+{
+	for (new i = 1; i <= MaxClients; i++)
+	{
+		PrintToConsole(i, message);
+	}
+}  
 
 public Action:LastMatch(client, args)
 {
@@ -4243,41 +4252,41 @@ public Handler_ReadySystem(Handle:menu, MenuAction:action, param1, param2)
 }
 
 //This is from warriormod [http://forums.alliedmods.net/showthread.php?t=64768] Will change in future to /stay or /swap command.
-DisplayStayLeaveVote( winner )
+DisplayStayLeaveVote(winner)
 {
 	// Maybe these guys are _still_ voting? Then don't send a new vote.
-	if( !IsVoteInProgress() )
+	if(!IsVoteInProgress())
 	{
-		new Handle:menu = CreateMenu( Handle_VoteStayLeave );
-		SetMenuTitle( menu, "Teams?"    );
-		AddMenuItem(  menu, "0", "Stay" );
-		AddMenuItem(  menu, "1", "Swap");
-		SetMenuExitButton( menu, false );
+		new Handle:menu = CreateMenu(Handle_VoteStayLeave);
+		SetMenuTitle(menu, "Teams?");
+		AddMenuItem(menu, "0", "Stay");
+		AddMenuItem(menu, "1", "Swap");
+		SetMenuExitButton(menu, false);
 		
 		new UsersInTeam[16],
 		    UsersCount = 0;
 		
-		for( new i = 1; i <= max_clients; i++ )
+		for( new i = 1; i <= MaxClients; i++ )
 		{
-			if( IsClientInGame(i) && GetClientTeam(i) == winner )
+			if(IsClientInGame(i) && GetClientTeam(i) == winner)
 			{
 				UsersInTeam[UsersCount++] = i;
 			}
 		}
-		VoteMenu( menu, UsersInTeam, UsersCount, 30 );	
+		VoteMenu(menu, UsersInTeam, UsersCount, 30);	
 	}
 }
-public Handle_VoteStayLeave( Handle:menu, MenuAction:action, param1, param2 )
+public Handle_VoteStayLeave(Handle:menu, MenuAction:action, param1, param2)
 {
-	if( action == MenuAction_End )
+	if(action == MenuAction_End)
 	{
 		CloseHandle(menu);
 	}
-	else if( action == MenuAction_VoteEnd )
+	else if(action == MenuAction_VoteEnd)
 	{
 		// Stay or Leave has been voted by the winners, act accordingly
 		//war_mode = MODE_NONE;
-		if( param1 == 0 )
+		if(param1 == 0)
 		{
 			// Stay
 			// show ready system
@@ -4290,9 +4299,9 @@ public Handle_VoteStayLeave( Handle:menu, MenuAction:action, param1, param2 )
 		{
 			/*// Testing: Autoswitch all clients
 			new theClientTeam = 0;
-			for( new i = 1; i <= max_clients; i++ )
+			for(new i = 1; i <= max_clients; i++)
 			{
-				if( IsClientInGame(i) && ( theClientTeam = GetClientTeam(i) ) >= TEAMINDEX_T )
+				if(IsClientInGame(i) && (theClientTeam = GetClientTeam(i)) >= TEAMINDEX_T)
 				{
 					// Switch
 					CS_SwitchTeam( i, 5 - theClientTeam );
@@ -4592,6 +4601,14 @@ public Action:SayChat(client, args)
 		else if (StrEqual(command, "scores", false) || StrEqual(command, "score", false) || StrEqual(command, "s", false))
 		{
 			ShowScore(client);
+		}
+		else if (StrEqual(command, "pause", false) || StrEqual(command, "pauses", false))
+		{
+			Pause(client, args);
+		}
+		else if (StrEqual(command, "unpause", false) || StrEqual(command, "unpauses", false))
+		{
+			UnPause(client, args);
 		}
 		else if (StrEqual(command, "info", false) || StrEqual(command, "i", false))
 		{
