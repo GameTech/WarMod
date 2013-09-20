@@ -953,16 +953,16 @@ public Action:Pause(client, args)
             if (GetClientTeam(client) == 3 && g_h_ct_pause_count != g_h_pause_limit)
             {
                 g_pause_offered_ct = true;
-                PrintToChatAll("CT have asked for a Pause. Please type !pause to pause the match.");
+                PrintToChatAll("%s CT have asked for a Pause. Please type !pause to pause the match.", CHAT_PREFIX);
                 g_h_stored_timer = CreateTimer(30.0, PauseTimeout);
             }
-            if (GetClientTeam(client) == 2 && g_h_t_pause_count != g_h_pause_limit)
+            else if (GetClientTeam(client) == 2 && g_h_t_pause_count != g_h_pause_limit)
             {
                 g_pause_offered_t = true;
-                PrintToChatAll("T have asked for a Pause. Please type !pause to pause the match.");
+                PrintToChatAll("%s T have asked for a Pause. Please type !pause to pause the match.", CHAT_PREFIX);
                 g_h_stored_timer = CreateTimer(30.0, PauseTimeout);
             }
-            if (GetClientTeam(client) == 2 && g_pause_offered_ct == true)
+            else if (GetClientTeam(client) == 2 && g_pause_offered_ct == true)
             {
 				if(g_h_stored_timer != INVALID_HANDLE)
 				{
@@ -975,22 +975,22 @@ public Action:Pause(client, args)
 				
 				if (GetConVarBool(g_h_pause_freezetime))
 				{
-					PrintToChatAll("Game will pause at the end of the round");
+					PrintToChatAll("%s Game will pause at the end of the round", CHAT_PREFIX);
 					g_pause_freezetime = true;
 				}
 				else
 				{
-					PrintToChatAll("Game is Paused. Please type !unpause to unpause the game.");
+					PrintToChatAll("%s Game is Paused. Please type !unpause to unpause the game.", CHAT_PREFIX);
 					if (GetConVarBool(g_h_auto_unpause))
 					{
-						PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+						PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, g_h_auto_unpause_delay);
 						g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
 					}
 					g_paused = true;
 					ServerCommand("pause");
 				}
 			}
-			if (GetClientTeam(client) == 3 && g_pause_offered_t == true)
+			else if (GetClientTeam(client) == 3 && g_pause_offered_t == true)
 			{
 				if(g_h_stored_timer != INVALID_HANDLE)
 				{
@@ -1002,90 +1002,90 @@ public Action:Pause(client, args)
 				
 				if (GetConVarBool(g_h_pause_freezetime))
 				{
-					PrintToChatAll("Game will pause at the end of the round");
+					PrintToChatAll("%s Game will pause at the end of the round", CHAT_PREFIX);
 					g_pause_freezetime = true;
 				}
 				else
 				{
-					PrintToChatAll("Game is Paused. Please type !unpause to unpause the game.");
+					PrintToChatAll("%s Game is Paused. Please type !unpause to unpause the game.", CHAT_PREFIX);
 					if (GetConVarBool(g_h_auto_unpause))
 					{
-						PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+						PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, g_h_auto_unpause_delay);
 						g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
 					}
 					g_paused = true;
 					ServerCommand("pause");
 				}
 			}
-			if (GetClientTeam(client) == 2 && g_h_t_pause_count == g_h_pause_limit)
+			else if (GetClientTeam(client) == 2 && g_h_t_pause_count == g_h_pause_limit)
 			{
-				PrintToChat(client, "You have used your pause limit already");
+				PrintToChat(client, "%s You have used your pause limit already", CHAT_PREFIX);
 			}
-			if (GetClientTeam(client) == 3 && g_h_ct_pause_count == g_h_pause_limit)
+			else if (GetClientTeam(client) == 3 && g_h_ct_pause_count == g_h_pause_limit)
 			{
-				PrintToChat(client, "You have used your pause limit already");
+				PrintToChat(client, "%s You have used your pause limit already", CHAT_PREFIX);
 			}
-			if (GetClientTeam(client) < 2 )
+			else if (GetClientTeam(client) < 2 )
 			{
-				PrintToChat(client, "You must be on T or CT to enable !pause");
+				PrintToChat(client, "%s You must be on T or CT to enable !pause", CHAT_PREFIX);
 			}
 		}
-		if (GetClientTeam(client) == 3 && g_h_ct_pause_count != g_h_pause_limit && !GetConVarBool(g_h_pause_comfirm))
+		else if (GetClientTeam(client) == 3 && g_h_ct_pause_count != g_h_pause_limit && !GetConVarBool(g_h_pause_comfirm))
 		{
 			g_h_ct_pause_count++;
 			if (GetConVarBool(g_h_pause_freezetime))
 			{
-				PrintToChatAll("Game will pause at the end of the round");
+				PrintToChatAll("%s Game will pause at the end of the round", CHAT_PREFIX);
 				g_pause_freezetime = true;
 			}
 			else
 			{
-				PrintToChatAll("Game is Paused. Please type !unpause to unpause the game.");
+				PrintToChatAll("%s Game is Paused. Please type !unpause to unpause the game.", CHAT_PREFIX);
 				if(GetConVarBool(g_h_auto_unpause))
 				{
-					PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+					PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, g_h_auto_unpause_delay);
 					g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
 				}
 				g_paused = true;
 				ServerCommand("pause");
 			}
 		}
-		if (GetClientTeam(client) == 2 &&  g_h_t_pause_count != g_h_pause_limit && !GetConVarBool(g_h_pause_comfirm))
+		else if (GetClientTeam(client) == 2 &&  g_h_t_pause_count != g_h_pause_limit && !GetConVarBool(g_h_pause_comfirm))
 		{
 			g_h_t_pause_count++;
 			if (GetConVarBool(g_h_pause_freezetime))
 			{
-				PrintToChatAll("Game will pause at the end of the round");
+				PrintToChatAll("%s Game will pause at the end of the round", CHAT_PREFIX);
 				g_pause_freezetime = true;
 			}
 			else
 			{
-				PrintToChatAll("Game is Paused. Please type !unpause to unpause the game.");
+				PrintToChatAll("%s Game is Paused. Please type !unpause to unpause the game.", CHAT_PREFIX);
 				if(GetConVarBool(g_h_auto_unpause))
 				{
-					PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+					PrintToChatAll("%s Game will auto unpause after %s seconds", CHAT_PREFIX, g_h_auto_unpause_delay);
 					g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
 				}
 				g_paused = true;
 				ServerCommand("pause");
 			}
 		}
-		if (GetClientTeam(client) == 2 && g_h_t_pause_count == g_h_pause_limit)
+		else if (GetClientTeam(client) == 2 && g_h_t_pause_count == g_h_pause_limit)
 		{
-			PrintToChat(client, "You have used your pause limit already");
+			PrintToChat(client, "%s You have used your pause limit already", CHAT_PREFIX);
 		}
-		if (GetClientTeam(client) == 3 && g_h_ct_pause_count == g_h_pause_limit)
+		else if (GetClientTeam(client) == 3 && g_h_ct_pause_count == g_h_pause_limit)
 		{
-			PrintToChat(client, "You have used your pause limit already");
+			PrintToChat(client, "%s You have used your pause limit already", CHAT_PREFIX);
 		}
-		if (GetClientTeam(client) < 2)
+		else if (GetClientTeam(client) < 2)
 		{
-		PrintToChat(client, "must be on T or CT to enable !pause");
+		PrintToChat(client, "%s You must be on T or CT to enable !pause", CHAT_PREFIX);
 		}
 	}
 	else
 	{
-		PrintToChatAll("sv_pauseable is set to 0. Pause fuction not enabled");
+		PrintToChatAll("%s sv_pauseable is set to 0. Pause fuction not enabled", CHAT_PREFIX);
 	}
 }
 
@@ -1098,54 +1098,54 @@ public Action:UnPause(client, args)
 			if (GetClientTeam(client) == 3 && g_pause_offered_ct == false && g_pause_offered_t == false)
 			{
 				g_pause_offered_ct = true;
-				PrintToConsoleAll("CT have asked to unpause the game. Please type /unpause to unpause the match.");
+				PrintToConsoleAll("<WarMod_BFG> CT have asked to unpause the game. Please type /unpause to unpause the match.");
 			}
-			if (GetClientTeam(client) == 2 && g_pause_offered_t == false && g_pause_offered_ct == false)
+			else if (GetClientTeam(client) == 2 && g_pause_offered_t == false && g_pause_offered_ct == false)
 			{
 				g_pause_offered_t = true;
-				PrintToConsoleAll("T have asked to unpause the game. Please type /unpause to unpause the match.");
+				PrintToConsoleAll("<WarMod_BFG> T have asked to unpause the game. Please type /unpause to unpause the match.");
 			}
-			if (GetClientTeam(client) == 2 && g_pause_offered_ct == true)
+			else if (GetClientTeam(client) == 2 && g_pause_offered_ct == true)
 			{
 				g_pause_offered_ct = false;
 				g_paused = false;
 				ServerCommand("unpause");
 			}
-			if (GetClientTeam(client) == 3 && g_pause_offered_t == true)
+			else if (GetClientTeam(client) == 3 && g_pause_offered_t == true)
 			{
 				g_pause_offered_t = false;
 				g_paused = false;
 				ServerCommand("unpause");
 			}
-			if (GetClientTeam(client) < 2 )
+			else if (GetClientTeam(client) < 2 )
 			{
-				PrintToConsole(client, "You must be on T or CT to enable /unpause");
+				PrintToConsole(client, "<WarMod_BFG> You must be on T or CT to enable /unpause");
 			}
 		}
 		else
 		{
 			if (GetClientTeam(client) == 2)
 			{
-				PrintToChatAll("T have unpaused the match");
+				PrintToChatAll("%s T have unpaused the match", CHAT_PREFIX);
 				g_paused = false;
 				ServerCommand("unpause");
 			}
-			if (GetClientTeam(client) == 3)
+			else if (GetClientTeam(client) == 3)
 			{
-				PrintToChatAll("T have unpaused the match");
+				PrintToChatAll("%s CT have unpaused the match", CHAT_PREFIX);
 				g_paused = false;
 				ServerCommand("unpause");
 			}
-			if (GetClientTeam(client) < 2 )
+			else if (GetClientTeam(client) < 2 )
 			{
-				PrintToConsole(client, "You must be on T or CT to enable /unpause");
+				PrintToConsole(client, "<WarMod_BFG> You must be on T or CT to enable /unpause");
 			}
 		}
 	}
 	else
 	{
-		PrintToChat(client,"Server is not paused or was paused via rcon.");
-		PrintToConsole(client,"Server is not paused or was paused via rcon.");
+		PrintToChat(client,"%s Server is not paused or was paused via rcon", CHAT_PREFIX);
+		PrintToConsole(client,"<WarMod_BFG> Server is not paused or was paused via rcon");
 	}
 }
 
@@ -2015,16 +2015,18 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 	{
 		if (g_t_knife)
 		{
-			// knife round won
+			/*// knife round won
 			if (GetConVarBool(g_h_auto_knife) && GetConVarBool(g_h_auto_ready))
 			{
 				PrintToServer( "Team %d voting for stay/swap.", winner );
 				DisplayStayLeaveVote( winner );
-			}
+			}*/
 			if (GetConVarBool(g_h_stats_enabled))
 			{
 				LogEvent("{\"event\": \"knife_win\", \"team\": %d}", winner);
 			}
+			PrintToServer( "Team %d voting for stay/swap.", winner );
+			DisplayStayLeaveVote( winner );
 			g_t_knife = false;
 			g_t_had_knife = true;
 			UpdateStatus();
