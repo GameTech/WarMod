@@ -143,7 +143,7 @@ new String:g_ct_name[64];
 new String:g_ct_name_escaped[64]; // pre-escaped for warmod logs
 
 /* Pause and Unpause */
-new bool:g_pause_freezetime = true;
+new bool:g_pause_freezetime = false;
 new bool:g_pause_offered_t = false;
 new bool:g_pause_offered_ct = false;
 new bool:g_paused = false;
@@ -1812,6 +1812,19 @@ public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast)
 		return;
 	}
 	
+	//Pause command fire on round start
+	if (g_pause_freezetime == true)
+	{
+		g_pause_freezetime = false;
+		if(GetConVarBool(g_h_auto_unpause))
+		{
+			PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
+			g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
+		}
+		g_paused = true;
+		ServerCommand("pause");
+	}
+	
 	if (GetConVarBool(g_h_stats_enabled))
 	{
 		LogEvent("{\"event\": \"round_start\", \"freezeTime\": %d}", GetConVarInt(FindConVar("mp_freezetime")));
@@ -1982,20 +1995,7 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast)
 	{
 		return;
 	}
-	
-	//Pause command fire on round end May change to on round start
-	if (g_pause_freezetime == true)
-	{
-		g_pause_freezetime = false;
-		if(GetConVarBool(g_h_auto_unpause))
-		{
-			PrintToChatAll("Game will auto unpause after %s seconds", g_h_auto_unpause_delay);
-			g_h_stored_timer = CreateTimer(GetConVarFloat(g_h_auto_unpause_delay), UnPauseTimer);
-		}
-		g_paused = true;
-		ServerCommand("pause");
-	}
-	
+
 	new winner = GetEventInt(event, "winner");
 	
 	// stats
