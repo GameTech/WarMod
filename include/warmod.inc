@@ -1,6 +1,6 @@
-#define QUERY_URL               "http://query.gametech.com.au"
+#define UPDATE_URL    "http://bfg-esports.com/myplugin/updatefile.txt"
 
-#define CHAT_PREFIX             "\x03<WarMod> \x04"
+#define CHAT_PREFIX             "\x03 <WarMod_BFG> \x04"
 #define SPECTATOR_TEAM          1
 #define TERRORIST_TEAM          2
 #define COUNTER_TERRORIST_TEAM  3
@@ -23,7 +23,7 @@
 
 #define MAX_PARAM_SIZE     512
 
-#define NUM_WEAPONS        28
+#define NUM_WEAPONS        55
 #define LOG_HIT_OFFSET     7
 
 #define	LOG_HIT_SHOTS      0
@@ -49,8 +49,8 @@
 #define CLUTCH_WON         3
 #define CLUTCH_NUM         4
 
-#define WM_VERSION         "3.1.10"
-#define WM_DESCRIPTION     "An automative service created by Twelve-60 of GameTech (www.gametech.com.au) for CS:S competition matches"
+#define WM_VERSION         "0.1.5"
+#define WM_DESCRIPTION     "An automative service created by Twelve-60 of GameTech (www.gametech.com.au) for CS:GO competition matches. Updated by Versatile_BFG"
 
 new String:g_team_name_cache[16][64];
 
@@ -461,7 +461,6 @@ stock SetConVarIntHidden(Handle:cvar, const value)
 	SetConVarInt(cvar, value);
 	GetConVarName(cvar, cvar_name, sizeof(cvar_name));
 	IntToString(value, value_string, sizeof(value_string));
-	Steam_SetRule(cvar_name, value_string);
 	SetConVarFlags(cvar, flags);
 }
 
@@ -479,7 +478,6 @@ stock SetConVarStringHidden(Handle:cvar, String:value[])
 	SetConVarFlags(cvar, flags & ~FCVAR_NOTIFY);
 	SetConVarString(cvar, value);
 	GetConVarName(cvar, cvar_name, sizeof(cvar_name));
-	Steam_SetRule(cvar_name, value);
 	SetConVarFlags(cvar, flags);
 }
 
